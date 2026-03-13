@@ -1,6 +1,7 @@
 import os
 import sys
 from datetime import datetime
+from pathlib import Path
 from typing import Any
 
 import pandas as pd
@@ -270,7 +271,209 @@ def load_gold_data(gold_path: str) -> pd.DataFrame:
             )
 
 
-def render_dashboard() -> None:
+def inject_shared_styles() -> None:
+    st.markdown(
+        """
+        <style>
+        .top-nav-wrap {
+            border-radius: 14px;
+            padding: 0.7rem 0.9rem;
+            margin-bottom: 0.8rem;
+            border: 1px solid rgba(14, 165, 233, 0.25);
+            background: linear-gradient(90deg, rgba(14,165,233,0.12), rgba(34,197,94,0.12));
+        }
+
+        .flow-card {
+            position: relative;
+            border-radius: 18px;
+            padding: 1rem 1rem 0.8rem 1rem;
+            margin: 0.7rem 0 1rem 0;
+            background: rgba(255, 255, 255, 0.75);
+            border: 1px solid rgba(148, 163, 184, 0.35);
+            overflow: hidden;
+            isolation: isolate;
+        }
+
+        .flow-card::before {
+            content: "";
+            position: absolute;
+            inset: -2px;
+            border-radius: 18px;
+            background: conic-gradient(
+                from var(--angle),
+                transparent 0deg,
+                transparent 220deg,
+                var(--line-color) 300deg,
+                transparent 360deg
+            );
+            animation: edge-run 3.2s linear infinite;
+            z-index: -1;
+        }
+
+        .flow-card::after {
+            content: "";
+            position: absolute;
+            inset: 1px;
+            border-radius: 16px;
+            background: rgba(255, 255, 255, 0.62);
+            z-index: -1;
+        }
+
+        .bronze { --line-color: #c27b43; }
+        .validation { --line-color: #ef4444; }
+        .silver { --line-color: #94a3b8; }
+
+        @property --angle {
+            syntax: '<angle>';
+            inherits: false;
+            initial-value: 0deg;
+        }
+
+        @keyframes edge-run {
+            from { --angle: 0deg; }
+            to { --angle: 360deg; }
+        }
+        </style>
+        """,
+        unsafe_allow_html=True,
+    )
+
+
+def render_top_nav() -> str:
+    st.markdown('<div class="top-nav-wrap"><strong>Navigation</strong></div>', unsafe_allow_html=True)
+    return st.radio(
+        "Select view",
+        ["Dashboard", "Bronze -> Validation -> Silver"],
+        horizontal=True,
+        label_visibility="collapsed",
+    )
+
+
+@st.cache_data(ttl=20, show_spinner=False)
+def load_delta_df(path_str: str) -> pd.DataFrame:
+    from deltalake import DeltaTable  # pyright: ignore[reportMissingImports]
+
+    return DeltaTable(path_str).to_pyarrow_table().to_pandas()
+
+
+@st.cache_data(ttl=20, show_spinner=False)
+def load_delta_history(path_str: str) -> pd.DataFrame:
+    from deltalake import DeltaTable  # pyright: ignore[reportMissingImports]
+
+    history_rows: list[dict[str, Any]] = DeltaTable(path_str).history()
+    if not history_rows:
+        return pd.DataFrame()
+    history_df = pd.DataFrame(history_rows)
+    if "timestamp" in history_df.columns:
+        history_df["timestamp"] = pd.to_datetime(history_df["timestamp"], errors="coerce")
+    return history_df
+
+
+def build_validation_frame(bronze_df: pd.DataFrame, silver_df: pd.DataFrame) -> pd.DataFrame:
+    metadata_cols = {"ingestion_timestamp", "source_file", "processing_timestamp"}
+    common_cols = [c for c in bronze_df.columns if c in silver_df.columns and c not in metadata_cols]
+    if not common_cols:
+        return pd.DataFrame()
+
+    checks: list[pd.DataFrame] = []
+
+    duplicate_mask = bronze_df.duplicated(subset=common_cols, keep="first")
+    duplicates = bronze_df[duplicate_mask].copy()
+    if not duplicates.empty:
+        duplicates["Reason"] = "Duplicate Record"
+        checks.append(duplicates)
+
+    null_sensitive_cols = [c for c in common_cols if bronze_df[c].isna().any()]
+    if null_sensitive_cols:
+        null_mask = bronze_df[null_sensitive_cols].isna().any(axis=1)
+        null_rows = bronze_df[null_mask & ~duplicate_mask].copy()
+        if not null_rows.empty:
+            null_rows["Reason"] = "Null values handled or imputed"
+            checks.append(null_rows)
+
+    if not checks:
+        return pd.DataFrame()
+
+    result = pd.concat(checks, ignore_index=True)
+    preferred_cols = [
+        c for c in ["order_id", "product", "category", "quantity", "price", "order_date", "Reason"]
+        if c in result.columns
+    ]
+    return result[preferred_cols] if preferred_cols else result
+
+
+def open_flow_card(step_title: str, subtitle: str, tone: str) -> None:
+    st.markdown(
+        f"""
+        <div class="flow-card {tone}">
+            <h3 style="margin:0; color:#000000;">{step_title}</h3>
+            <p style="margin:0.25rem 0 0.5rem 0; color:#334155;">{subtitle}</p>
+        """,
+        unsafe_allow_html=True,
+    )
+
+
+def close_flow_card() -> None:
+    st.markdown("</div>", unsafe_allow_html=True)
+
+
+def render_medallion_section() -> None:
+    script_dir = Path(__file__).resolve().parent
+    bronze_path = script_dir / "data" / "bronze"
+    silver_path = script_dir / "data" / "silver"
+
+    if not bronze_path.exists() or not silver_path.exists():
+        st.error("Bronze/Silver Delta paths are missing. Run the pipeline first.")
+        return
+
+    try:
+        bronze_df = load_delta_df(str(bronze_path))
+        bronze_history = load_delta_history(str(bronze_path))
+    except Exception as exc:
+        st.error(f"Failed to load Bronze: {exc}")
+        return
+
+    try:
+        silver_df = load_delta_df(str(silver_path))
+        silver_history = load_delta_history(str(silver_path))
+    except Exception as exc:
+        st.error(f"Failed to load Silver: {exc}")
+        return
+
+    open_flow_card(
+        "Step 1: Bronze Layer (Raw Data)",
+        "Ingested source records before quality and dedup transformations.",
+        "bronze",
+    )
+    st.dataframe(bronze_df.head(12), use_container_width=True)
+    with st.expander("Show Bronze Delta Transaction History"):
+        st.dataframe(bronze_history, use_container_width=True)
+    close_flow_card()
+
+    open_flow_card(
+        "Step 2: Data Quality and Validation",
+        "On-the-fly comparison between Bronze and Silver to show record changes.",
+        "validation",
+    )
+    validation_df = build_validation_frame(bronze_df, silver_df)
+    if validation_df.empty:
+        st.success("No duplicate/null-handled records detected in the current snapshot.")
+    else:
+        st.dataframe(validation_df.head(30), use_container_width=True)
+    close_flow_card()
+
+    open_flow_card(
+        "Step 3: Silver Layer (Cleaned Data)",
+        "Deduplicated and null-handled dataset used for downstream analytics.",
+        "silver",
+    )
+    st.dataframe(silver_df.head(12), use_container_width=True)
+    with st.expander("Show Silver Delta Transaction History"):
+        st.dataframe(silver_history, use_container_width=True)
+    close_flow_card()
+
+
+def render_dashboard_home() -> None:
     st.title("Data Pipeline Analytics Dashboard")
 
     top_col1, top_col2 = st.columns([6, 1])
@@ -332,6 +535,17 @@ def render_dashboard() -> None:
         st.dataframe(gold_df, use_container_width=True)
 
     st.caption(f"Last heartbeat at {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
+
+
+def render_dashboard() -> None:
+    inject_shared_styles()
+    current_view = render_top_nav()
+
+    if current_view == "Dashboard":
+        render_dashboard_home()
+    else:
+        st.title("Medallion Flow and ACID")
+        render_medallion_section()
 
 
 if __name__ == "__main__":
