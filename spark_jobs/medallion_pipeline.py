@@ -18,12 +18,30 @@ def configure_logging() -> logging.Logger:
     return logging.getLogger("medallion_pipeline")
 
 
+def _configure_windows_runtime() -> None:
+    """Configure HADOOP_HOME on Windows using the local hadoop directory."""
+    if os.name != "nt":
+        return
+    
+    script_dir = os.path.dirname(os.path.abspath(__file__))
+    project_root = os.path.dirname(script_dir)
+    hadoop_home = os.path.join(project_root, "hadoop")
+    
+    if os.path.exists(os.path.join(hadoop_home, "bin", "winutils.exe")):
+        os.environ["HADOOP_HOME"] = hadoop_home
+        os.environ["hadoop.home.dir"] = hadoop_home
+        hadoop_bin = os.path.join(hadoop_home, "bin")
+        if hadoop_bin not in os.environ["PATH"]:
+            os.environ["PATH"] = hadoop_bin + os.pathsep + os.environ.get("PATH", "")
+
 def create_spark_session(app_name: str) -> SparkSession:
+    _configure_windows_runtime()
     return (
         SparkSession.builder.appName(app_name)
         .config("spark.jars.packages", DELTA_COORDINATE)
         .config("spark.sql.extensions", "io.delta.sql.DeltaSparkSessionExtension")
         .config("spark.sql.catalog.spark_catalog", "org.apache.spark.sql.delta.catalog.DeltaCatalog")
+        .config("spark.driver.extraJavaOptions", "-Djava.net.preferIPv4Stack=true")
         .getOrCreate()
     )
 

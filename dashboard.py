@@ -42,9 +42,10 @@ def _configure_hadoop_runtime() -> None:
 
     script_dir = os.path.dirname(os.path.abspath(__file__))
     candidate_hadoop_homes = [
+        os.path.join(script_dir, "hadoop"),
+        os.path.join(script_dir, ".hadoop"),
         os.environ.get("HADOOP_HOME", ""),
         os.environ.get("hadoop.home.dir", ""),
-        os.path.join(script_dir, ".hadoop"),
         r"C:\hadoop",
         r"C:\tools\hadoop",
         os.path.join(os.path.expanduser("~"), "hadoop"),
@@ -101,26 +102,47 @@ def create_spark_session() -> SparkSession:
 
 def _normalize_gold_dataframe(raw_df: pd.DataFrame) -> pd.DataFrame:
     if raw_df.empty:
+        st.warning("Normalization received an empty dataframe.")
         return raw_df
 
-    renamed_df = raw_df.rename(
-        columns={
-            "order_date": "date",
-            "total_orders_per_day": "total_orders",
-            "total_revenue_per_day": "total_revenue",
-        }
-    )
+    st.write("Raw data preview:", raw_df.head())
+    st.write("Raw columns:", list(raw_df.columns))
 
-    for col_name in ["date", "total_orders", "total_revenue"]:
-        if col_name not in renamed_df.columns:
-            renamed_df[col_name] = 0.0 if col_name == "total_revenue" else 0
+    # Normalize column names (handle both PySpark and deltalake naming variations)
+    mapping = {
+        "order_date": "date",
+        "total_orders_per_day": "total_orders",
+        "total_revenue_per_day": "total_revenue",
+    }
+    
+    renamed_df = raw_df.copy()
+    for old_col, new_col in mapping.items():
+        if old_col in renamed_df.columns:
+            renamed_df = renamed_df.rename(columns={old_col: new_col})
+        elif new_col not in renamed_df.columns:
+            # If neither exists, create it with defaults
+            renamed_df[new_col] = 0.0 if "revenue" in new_col else 0
+
+    # Ensure columns exist
+    for col in ["date", "total_orders", "total_revenue"]:
+        if col not in renamed_df.columns:
+            renamed_df[col] = 0.0 if col == "total_revenue" else 0
 
     normalized_df = renamed_df[["date", "total_orders", "total_revenue"]].copy()
+    
+    # Robust date conversion
     normalized_df["date"] = pd.to_datetime(normalized_df["date"], errors="coerce")
+    
+    # Drop rows where date could not be parsed to avoid chart errors
+    normalized_df = normalized_df.dropna(subset=["date"])
+    
     normalized_df["total_orders"] = pd.to_numeric(normalized_df["total_orders"], errors="coerce").fillna(0)
     normalized_df["total_revenue"] = pd.to_numeric(normalized_df["total_revenue"], errors="coerce").fillna(0.0)
 
-    return normalized_df.sort_values("date")
+    result = normalized_df.sort_values("date")
+    if result.empty:
+         st.warning("Dataframe is empty after filtering out invalid dates.")
+    return result
 
 
 def _load_gold_with_spark(gold_path: str) -> pd.DataFrame:
@@ -145,6 +167,11 @@ def _load_gold_without_spark(gold_path: str) -> pd.DataFrame:
     delta_table = DeltaTable(gold_path)
     arrow_table: Any = delta_table.to_pyarrow_table()
     pandas_df = arrow_table.to_pandas()
+    
+    if not pandas_df.empty:
+        st.info(f"Loaded {len(pandas_df)} rows via native reader. Columns: {list(pandas_df.columns)}")
+    else:
+        st.warning("Native reader returned an empty dataframe.")
 
     return _normalize_gold_dataframe(pandas_df)
 
@@ -153,8 +180,9 @@ def _load_gold_without_spark(gold_path: str) -> pd.DataFrame:
 def load_gold_data(gold_path: str) -> pd.DataFrame:
     try:
         return _load_gold_with_spark(gold_path)
-    except SparkRuntimePrecheckError:
-        # If Spark cannot start on Windows due to missing winutils, use native Delta reader.
+    except Exception as exc:
+        # If Spark fails (Java error, Winutils, etc.), fall back to the native Delta reader.
+        st.warning(f"Spark failed to load data, falling back to native reader... Error: {str(exc)[:100]}...")
         return _load_gold_without_spark(gold_path)
 
 
