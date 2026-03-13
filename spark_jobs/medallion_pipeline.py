@@ -1,13 +1,15 @@
 import logging
 import os
-from typing import Tuple
+import re
+import glob
+import sys
+from typing import List, Tuple
 
+from delta import configure_spark_with_delta_pip
 from pyspark.sql import DataFrame, SparkSession
 from pyspark.sql import functions as F
 from pyspark.sql import types as T
-
-
-DELTA_COORDINATE = "io.delta:delta-spark_2.12:3.2.0"
+from pyspark.sql.window import Window
 
 
 def configure_logging() -> logging.Logger:
@@ -34,16 +36,39 @@ def _configure_windows_runtime() -> None:
         if hadoop_bin not in os.environ["PATH"]:
             os.environ["PATH"] = hadoop_bin + os.pathsep + os.environ.get("PATH", "")
 
+
+def _configure_java_runtime() -> None:
+    """Prefer a Spark-compatible Java runtime to avoid gateway startup failures."""
+    candidate_paths = [
+        os.environ.get("JAVA_HOME", ""),
+        r"C:\Users\User\.jdk\jdk-17.0.16",
+        r"C:\Program Files\Java\jdk-17",
+    ]
+
+    java_home = next((p for p in candidate_paths if p and os.path.exists(p)), None)
+    if not java_home:
+        return
+
+    os.environ["JAVA_HOME"] = java_home
+    java_bin = os.path.join(java_home, "bin")
+    current_path = os.environ.get("PATH", "")
+    if java_bin not in current_path:
+        os.environ["PATH"] = java_bin + os.pathsep + current_path
+
 def create_spark_session(app_name: str) -> SparkSession:
+    _configure_java_runtime()
     _configure_windows_runtime()
-    return (
+
+    # Ensure Spark workers use the same Python interpreter as this process.
+    os.environ.setdefault("PYSPARK_PYTHON", sys.executable)
+    os.environ.setdefault("PYSPARK_DRIVER_PYTHON", sys.executable)
+    builder = (
         SparkSession.builder.appName(app_name)
-        .config("spark.jars.packages", DELTA_COORDINATE)
         .config("spark.sql.extensions", "io.delta.sql.DeltaSparkSessionExtension")
         .config("spark.sql.catalog.spark_catalog", "org.apache.spark.sql.delta.catalog.DeltaCatalog")
         .config("spark.driver.extraJavaOptions", "-Djava.net.preferIPv4Stack=true")
-        .getOrCreate()
     )
+    return configure_spark_with_delta_pip(builder).getOrCreate()
 
 
 def ensure_directories(paths: Tuple[str, ...]) -> None:
@@ -51,19 +76,159 @@ def ensure_directories(paths: Tuple[str, ...]) -> None:
         os.makedirs(path, exist_ok=True)
 
 
-def write_delta(df: DataFrame, output_path: str, mode: str = "overwrite") -> None:
-    df.write.format("delta").mode(mode).option("overwriteSchema", "true").save(output_path)
+def _canonicalize_column_name(name: str) -> str:
+    normalized = re.sub(r"[^a-z0-9_]+", "_", str(name).strip().lower()).strip("_")
+    return normalized or "col"
+
+
+def _normalize_batch_columns(df: DataFrame) -> DataFrame:
+    """Normalize CSV headers so unionByName can reliably align evolving schemas."""
+    seen: dict[str, int] = {}
+    output_cols: list[str] = []
+    for col_name in df.columns:
+        base_name = _canonicalize_column_name(col_name)
+        seen[base_name] = seen.get(base_name, 0) + 1
+        suffix = seen[base_name]
+        output_cols.append(base_name if suffix == 1 else f"{base_name}_{suffix}")
+
+    normalized_df = df.toDF(*output_cols)
+
+    # Keep downstream logic stable across common source header variants.
+    if "product_name" in normalized_df.columns and "product" not in normalized_df.columns:
+        normalized_df = normalized_df.withColumnRenamed("product_name", "product")
+
+    return normalized_df
+
+
+def _read_single_csv_batch(spark: SparkSession, file_path: str) -> DataFrame:
+    """
+    Read one CSV batch with dynamic-width row support.
+
+    Why: Schema Evolution belongs in Delta writes, but upstream files may contain
+    rows with additional trailing values before the whole source header is updated.
+    This parser keeps those rows by materializing extra columns (extra_col_1, ...)
+    instead of dropping them.
+    """
+    raw_df = (
+        spark.read.text(file_path)
+        .where(F.col("value").isNotNull() & (F.length(F.trim(F.col("value"))) > 0))
+    )
+
+    header_row = raw_df.first()
+    if header_row is None:
+        raise ValueError(f"CSV file is empty: {file_path}")
+
+    header_tokens = [token.strip() for token in str(header_row["value"]).split(",")]
+    normalized_first_row = [_canonicalize_column_name(token) for token in header_tokens]
+    known_headers = {
+        "order_id", "customer_id", "product", "product_name", "unit_price",
+        "quantity", "order_date", "event_timestamp", "date", "revenue",
+        "amount", "discount_code",
+    }
+    has_header = any(token in known_headers for token in normalized_first_row)
+
+    data_df = raw_df.where(F.col("value") != F.lit(header_row["value"])) if has_header else raw_df
+    if data_df.limit(1).count() == 0:
+        fallback_cols = normalized_first_row if has_header else ["order_id", "customer_id", "product", "unit_price", "quantity", "order_date"]
+        empty_exprs = [F.lit(None).cast("string").alias(col_name) for col_name in fallback_cols]
+        return raw_df.limit(0).select(*empty_exprs)
+
+    split_col = F.split(F.col("value"), ",")
+    max_tokens = data_df.select(F.max(F.size(split_col)).alias("max_tokens")).collect()[0]["max_tokens"] or 0
+
+    if has_header:
+        header_cols = normalized_first_row
+    else:
+        canonical = ["order_id", "customer_id", "product", "unit_price", "quantity", "order_date"]
+        header_cols = [
+            canonical[i] if i < len(canonical) else f"extra_col_{i - len(canonical) + 1}"
+            for i in range(max_tokens)
+        ]
+
+    select_exprs = []
+    for idx, col_name in enumerate(header_cols):
+        select_exprs.append(F.trim(F.get(split_col, F.lit(idx))).alias(col_name))
+
+    for idx in range(len(header_cols), max_tokens):
+        extra_idx = idx - len(header_cols) + 1
+        select_exprs.append(F.trim(F.get(split_col, F.lit(idx))).alias(f"extra_col_{extra_idx}"))
+
+    parsed_df = data_df.select(*select_exprs)
+    return _normalize_batch_columns(parsed_df)
+
+
+def write_delta(
+    df: DataFrame,
+    output_path: str,
+    mode: str = "overwrite",
+    partition_cols: list = None,
+    evolve_schema: bool = True,
+) -> None:
+    writer = df.write.format("delta").mode(mode)
+
+    # Schema Evolution happens here at Delta write-time.
+    # mergeSchema expands the Delta table schema when new columns arrive in incoming batches.
+    # Existing rows in older files remain valid and will read NULL for the newly added columns.
+    if evolve_schema:
+        writer = writer.option("mergeSchema", "true")
+    else:
+        writer = writer.option("overwriteSchema", "true")
+
+    if partition_cols:
+        writer = writer.partitionBy(*partition_cols)
+
+    writer.save(output_path)
+
+
+def _read_and_union_csv_batches(spark: SparkSession, input_path: str, logger: logging.Logger) -> DataFrame:
+    csv_pattern = os.path.join(input_path, "*.csv")
+    csv_files: List[str] = sorted(glob.glob(csv_pattern))
+
+    if not csv_files:
+        raise FileNotFoundError(f"No CSV files found at: {csv_pattern}")
+
+    logger.info("Bronze layer: discovered %s input file(s)", len(csv_files))
+
+    union_df = None
+    for file_path in csv_files:
+        batch_df = _read_single_csv_batch(spark, file_path)
+
+        if union_df is None:
+            union_df = batch_df
+        else:
+            # Allow new batch-specific columns (for example discount_code) to flow into Bronze.
+            # Missing columns in older batches are automatically filled with NULL by Spark.
+            union_df = union_df.unionByName(batch_df, allowMissingColumns=True)
+
+    if union_df is None:
+        raise ValueError("CSV read produced an empty DataFrame")
+
+    return union_df
 
 
 def run_bronze_layer(spark: SparkSession, input_path: str, bronze_path: str, logger: logging.Logger) -> DataFrame:
     logger.info("Bronze layer: syncing records from %s (full refresh to support removals)", input_path)
 
-    # Use batch read to ensure deletions in the source folder are reflected in the target
+    # Read each batch and union by column names so new columns can evolve safely.
+    bronze_df = _read_and_union_csv_batches(spark, input_path, logger)
+
+    # Harmonize common column aliases to keep downstream logic stable.
+    if "product_name" in bronze_df.columns and "product" not in bronze_df.columns:
+        bronze_df = bronze_df.withColumnRenamed("product_name", "product")
+
+    # Apply known type casts after dynamic parsing to preserve downstream logic.
+    integer_like = ["order_id", "customer_id", "quantity"]
+    for col_name in integer_like:
+        if col_name in bronze_df.columns:
+            bronze_df = bronze_df.withColumn(col_name, F.col(col_name).cast("long"))
+
+    decimal_like = ["unit_price", "price", "revenue", "amount"]
+    for col_name in decimal_like:
+        if col_name in bronze_df.columns:
+            bronze_df = bronze_df.withColumn(col_name, F.col(col_name).cast("double"))
+
     bronze_df = (
-        spark.read.option("header", True)
-        .option("inferSchema", True)
-        .csv(os.path.join(input_path, "*.csv"))
-        .withColumn("ingestion_timestamp", F.current_timestamp())
+        bronze_df.withColumn("ingestion_timestamp", F.current_timestamp())
         .withColumn("source_file", F.input_file_name())
     )
 
@@ -81,8 +246,31 @@ def run_silver_layer(spark: SparkSession, bronze_path: str, silver_path: str, lo
     metadata_columns = {"ingestion_timestamp", "source_file", "processing_timestamp"}
     business_columns = [c for c in df.columns if c not in metadata_columns]
 
+    preferred_dedupe_keys = ["order_id", "order_date", "customer_id"]
+    dedupe_columns = [c for c in preferred_dedupe_keys if c in df.columns]
+
     logger.info("Silver layer: removing duplicate records")
-    if business_columns:
+    if "order_id" in df.columns:
+        logger.info("Silver layer: deduplicating by order_id (keeping latest record)")
+        sort_exprs = []
+        if "order_date" in df.columns:
+            sort_exprs.append(F.to_timestamp(F.col("order_date")))
+        if "event_timestamp" in df.columns:
+            sort_exprs.append(F.to_timestamp(F.col("event_timestamp")))
+        sort_exprs.append(F.col("ingestion_timestamp").cast("timestamp"))
+        order_date_sort_col = F.coalesce(*sort_exprs)
+
+        row_window = Window.partitionBy("order_id").orderBy(order_date_sort_col.desc_nulls_last())
+        df = (
+            df.withColumn("_row_num", F.row_number().over(row_window))
+            .filter(F.col("_row_num") == 1)
+            .drop("_row_num")
+        )
+    elif dedupe_columns:
+        logger.info("Silver layer: deduplicating using key columns %s", dedupe_columns)
+        df = df.dropDuplicates(dedupe_columns)
+    elif business_columns:
+        logger.info("Silver layer: deduplicating using all business columns")
         df = df.dropDuplicates(business_columns)
     else:
         df = df.dropDuplicates()
@@ -166,8 +354,8 @@ def run_gold_layer(spark: SparkSession, silver_path: str, gold_path: str, logger
         .orderBy("order_date")
     )
 
-    logger.info("Gold layer: writing Delta table to %s", gold_path)
-    write_delta(gold_df, gold_path)
+    logger.info("Gold layer: writing Delta table to %s (partitioned by order_date)", gold_path)
+    write_delta(gold_df, gold_path, partition_cols=["order_date"])
 
     return gold_df
 

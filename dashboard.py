@@ -111,30 +111,60 @@ def _compute_medallion_realtime(input_path: str) -> tuple[pd.DataFrame, pd.DataF
     dfs = []
     for f in csv_files:
         try:
-            first_row = pd.read_csv(f, nrows=1)
-            header_keywords = ["id", "order", "date", "revenue", "product", "amount"]
-            has_header = any(any(key in str(col).lower() for key in header_keywords) for col in first_row.columns)
-            temp_df = pd.read_csv(f) if has_header else pd.read_csv(f, header=None)
+            import csv
+            with open(f, 'r', encoding='utf-8-sig') as file:
+                reader = csv.reader(file)
+                data = list(reader)
+            if not data: continue
             
-            if temp_df.empty: continue
+            first_row = data[0]
+            header_keywords = ["id", "order", "date", "revenue", "product", "amount"]
+            has_header = any(any(key in str(col).lower() for key in header_keywords) for col in first_row)
+            
+            temp_df = pd.DataFrame(data)
+            if has_header:
+                cols = first_row.copy()
+                for i in range(len(cols), temp_df.shape[1]):
+                    cols.append(f"extra_col_{i - len(first_row) + 1}")
+                temp_df.columns = cols
+                temp_df = temp_df.iloc[1:].reset_index(drop=True)
+            else:
+                canonical = ["order_id", "customer_id", "product", "unit_price", "quantity", "order_date"]
+                cols = [canonical[i] if i < len(canonical) else f"extra_col_{i - len(canonical) + 1}" for i in range(temp_df.shape[1])]
+                temp_df.columns = cols
 
-            # Map common columns for display uniformity
-            col_map = {temp_df.columns[0]: "order_id", temp_df.columns[-1]: "order_date"}
-            if len(temp_df.columns) > 2: col_map[temp_df.columns[2]] = "product"
-            temp_df.rename(columns=col_map, inplace=True)
+            if temp_df.empty:
+                continue
+
+            # Normalize and deduplicate headers before concat.
+            temp_df.columns = [str(c).strip().lower() for c in temp_df.columns]
+            temp_df = temp_df.loc[:, ~temp_df.columns.duplicated(keep="first")]
+
+            rename_map = {
+                "product_name": "product",
+                "date": "order_date",
+                "event_timestamp": "order_date",
+            }
+            temp_df.rename(columns=rename_map, inplace=True)
+
+            if "order_id" not in temp_df.columns or "order_date" not in temp_df.columns:
+                continue
             
             # Add metadata for Bronze feel
             temp_df["ingestion_timestamp"] = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
             temp_df["source_file"] = os.path.basename(f)
             dfs.append(temp_df)
-        except Exception: continue
+        except Exception:
+            continue
 
-    if not dfs: return pd.DataFrame(), pd.DataFrame()
-    
-    bronze_rt = pd.concat(dfs, ignore_index=True)
-    
+    if not dfs:
+        return pd.DataFrame(), pd.DataFrame()
+
+    bronze_rt = pd.concat(dfs, ignore_index=True, sort=False)
+
     # Silver is the Cleaned version: Deduplicated on order_id
-    silver_rt = bronze_rt.drop_duplicates(subset=["order_id"], keep="first").copy()
+    dedupe_cols = [c for c in ["order_id", "order_date", "customer_id"] if c in bronze_rt.columns]
+    silver_rt = bronze_rt.drop_duplicates(subset=dedupe_cols or None, keep="first").copy()
     silver_rt["processing_timestamp"] = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
     
     return bronze_rt, silver_rt
@@ -150,17 +180,25 @@ def _compute_gold_from_raw(input_path: str) -> pd.DataFrame:
     dfs = []
     for f in csv_files:
         try:
-            # 1. Detection: Read first line to check if it's a header or data
-            first_row = pd.read_csv(f, nrows=1)
-            # If any typical header string is found in column names, assume it has a header
-            header_keywords = ["id", "order", "date", "revenue", "product", "amount"]
-            has_header = any(any(key in str(col).lower() for key in header_keywords) for col in first_row.columns)
+            import csv
+            with open(f, 'r', encoding='utf-8-sig') as file:
+                reader = csv.reader(file)
+                data = list(reader)
+            if not data: continue
             
+            first_row = data[0]
+            header_keywords = ["id", "order", "date", "revenue", "product", "amount"]
+            has_header = any(any(key in str(col).lower() for key in header_keywords) for col in first_row)
+            
+            temp_df = pd.DataFrame(data)
             if has_header:
-                temp_df = pd.read_csv(f)
+                cols = first_row.copy()
+                for i in range(len(cols), temp_df.shape[1]):
+                    cols.append(f"extra_col_{i - len(first_row) + 1}")
+                temp_df.columns = cols
+                temp_df = temp_df.iloc[1:].reset_index(drop=True)
             else:
-                # No header detected: Re-read with header=None to preserve first data row
-                temp_df = pd.read_csv(f, header=None)
+                temp_df.columns = [f"col_{i}" for i in range(temp_df.shape[1])]
             
             # 2. Robust Column Mapping
             if temp_df.empty:
@@ -193,8 +231,18 @@ def _compute_gold_from_raw(input_path: str) -> pd.DataFrame:
                 if found_date:
                     temp_df.rename(columns={found_date: "order_date"}, inplace=True)
                 else:
-                    # Fallback: assume last column is date
-                    temp_df.rename(columns={temp_df.columns[-1]: "order_date"}, inplace=True)
+                    # Fallback: assume last column is date, provided it's at least index 1
+                    # Note: last column may be the new discounted_code!
+                    # A better fallback: look for a column that looks like a date.
+                    date_col = None
+                    for col in temp_df.columns:
+                        if temp_df[col].astype(str).str.contains(r'\d{4}-\d{2}-\d{2}').any():
+                            date_col = col
+                            break
+                    if date_col:
+                        temp_df.rename(columns={date_col: "order_date"}, inplace=True)
+                    else:
+                        temp_df.rename(columns={temp_df.columns[-1]: "order_date"}, inplace=True)
 
             # Ensure we have the critical columns at least renamed
             cols_to_keep = ["order_id", "order_date"]
