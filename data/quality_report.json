@@ -1,0 +1,282 @@
+{
+  "generated_at": "2026-03-13T19:54:05.541485Z",
+  "overall_status": "FAIL",
+  "layers": [
+    {
+      "layer": "bronze",
+      "path": "/data/bronze",
+      "status": "WARN",
+      "row_count": 417,
+      "columns": [
+        "order_id",
+        "customer_id",
+        "product",
+        "unit_price",
+        "quantity",
+        "order_date",
+        "discount_code",
+        "ingestion_timestamp",
+        "source_file"
+      ],
+      "checks": [
+        {
+          "name": "row_count",
+          "status": "PASS",
+          "message": "417 rows"
+        },
+        {
+          "name": "null_check_order_id",
+          "status": "PASS",
+          "message": "No nulls in order_id"
+        },
+        {
+          "name": "null_check_order_date",
+          "status": "PASS",
+          "message": "No nulls in order_date"
+        },
+        {
+          "name": "null_check_customer_id",
+          "status": "PASS",
+          "message": "No nulls in customer_id"
+        },
+        {
+          "name": "duplicate_order_ids",
+          "status": "WARNING",
+          "message": "101 duplicate order_id(s) (24.22%) \u2014 expected in Bronze"
+        },
+        {
+          "name": "range_unit_price",
+          "status": "PASS",
+          "message": "All unit_price values > 0"
+        },
+        {
+          "name": "range_quantity",
+          "status": "PASS",
+          "message": "All quantity values > 0"
+        },
+        {
+          "name": "date_validity",
+          "status": "PASS",
+          "message": "All order_date values parse as valid dates"
+        },
+        {
+          "name": "future_dates",
+          "status": "WARNING",
+          "message": "417 row(s) with future order_date"
+        },
+        {
+          "name": "schema_check",
+          "status": "PASS",
+          "message": "All required columns present"
+        }
+      ],
+      "critical_failures": 0,
+      "warnings": 2
+    },
+    {
+      "layer": "quarantine",
+      "path": "/data/quarantine",
+      "status": "FAIL",
+      "row_count": 0,
+      "columns": [],
+      "checks": [
+        {
+          "name": "delta_read",
+          "status": "CRITICAL",
+          "message": "Cannot read Delta table: [DELTA_TABLE_NOT_FOUND] Delta table `/data/quarantine` doesn't exist."
+        }
+      ],
+      "critical_failures": 1,
+      "warnings": 0
+    },
+    {
+      "layer": "validated",
+      "path": "/data/validated",
+      "status": "WARN",
+      "row_count": 417,
+      "columns": [
+        "order_id",
+        "customer_id",
+        "product",
+        "unit_price",
+        "quantity",
+        "order_date",
+        "discount_code",
+        "ingestion_timestamp",
+        "source_file"
+      ],
+      "checks": [
+        {
+          "name": "row_count",
+          "status": "PASS",
+          "message": "417 rows"
+        },
+        {
+          "name": "null_check_order_id",
+          "status": "PASS",
+          "message": "No nulls in order_id"
+        },
+        {
+          "name": "null_check_order_date",
+          "status": "PASS",
+          "message": "No nulls in order_date"
+        },
+        {
+          "name": "null_check_customer_id",
+          "status": "PASS",
+          "message": "No nulls in customer_id"
+        },
+        {
+          "name": "duplicate_order_ids",
+          "status": "WARNING",
+          "message": "101 duplicate order_id(s) (24.22%) \u2014 expected in Bronze"
+        },
+        {
+          "name": "range_unit_price",
+          "status": "PASS",
+          "message": "All unit_price values > 0"
+        },
+        {
+          "name": "range_quantity",
+          "status": "PASS",
+          "message": "All quantity values > 0"
+        },
+        {
+          "name": "date_validity",
+          "status": "PASS",
+          "message": "All order_date values parse as valid dates"
+        },
+        {
+          "name": "future_dates",
+          "status": "WARNING",
+          "message": "417 row(s) with future order_date"
+        },
+        {
+          "name": "schema_check",
+          "status": "PASS",
+          "message": "All required columns present"
+        }
+      ],
+      "critical_failures": 0,
+      "warnings": 2
+    },
+    {
+      "layer": "silver",
+      "path": "/data/silver",
+      "status": "WARN",
+      "row_count": 316,
+      "columns": [
+        "order_id",
+        "customer_id",
+        "product",
+        "unit_price",
+        "quantity",
+        "order_date",
+        "discount_code",
+        "ingestion_timestamp",
+        "source_file",
+        "processing_timestamp"
+      ],
+      "checks": [
+        {
+          "name": "row_count",
+          "status": "PASS",
+          "message": "316 rows"
+        },
+        {
+          "name": "null_check_order_id",
+          "status": "PASS",
+          "message": "No nulls in order_id"
+        },
+        {
+          "name": "null_check_order_date",
+          "status": "PASS",
+          "message": "No nulls in order_date"
+        },
+        {
+          "name": "null_check_customer_id",
+          "status": "PASS",
+          "message": "No nulls in customer_id"
+        },
+        {
+          "name": "duplicate_order_ids",
+          "status": "PASS",
+          "message": "No duplicate order_ids"
+        },
+        {
+          "name": "range_unit_price",
+          "status": "PASS",
+          "message": "All unit_price values > 0"
+        },
+        {
+          "name": "range_quantity",
+          "status": "PASS",
+          "message": "All quantity values > 0"
+        },
+        {
+          "name": "date_validity",
+          "status": "PASS",
+          "message": "All order_date values parse as valid dates"
+        },
+        {
+          "name": "future_dates",
+          "status": "WARNING",
+          "message": "316 row(s) with future order_date"
+        },
+        {
+          "name": "schema_check",
+          "status": "PASS",
+          "message": "All required columns present"
+        },
+        {
+          "name": "silver_row_sanity",
+          "status": "PASS",
+          "message": "Silver has 316 rows (duplicates removed from validated)"
+        }
+      ],
+      "critical_failures": 0,
+      "warnings": 1
+    },
+    {
+      "layer": "gold",
+      "path": "/data/gold",
+      "status": "WARN",
+      "row_count": 64,
+      "columns": [
+        "order_date",
+        "order_ids",
+        "total_orders_per_day",
+        "total_revenue_per_day"
+      ],
+      "checks": [
+        {
+          "name": "row_count",
+          "status": "PASS",
+          "message": "64 rows"
+        },
+        {
+          "name": "null_check_order_date",
+          "status": "PASS",
+          "message": "No nulls in order_date"
+        },
+        {
+          "name": "date_validity",
+          "status": "PASS",
+          "message": "All order_date values parse as valid dates"
+        },
+        {
+          "name": "future_dates",
+          "status": "WARNING",
+          "message": "64 row(s) with future order_date"
+        },
+        {
+          "name": "schema_check",
+          "status": "PASS",
+          "message": "All required columns present"
+        }
+      ],
+      "critical_failures": 0,
+      "warnings": 1
+    }
+  ]
+}

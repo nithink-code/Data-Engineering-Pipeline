@@ -448,7 +448,7 @@ def render_top_nav() -> str:
     st.markdown('<div class="top-nav-wrap"><strong>Navigation</strong></div>', unsafe_allow_html=True)
     return st.radio(
         "Select view",
-        ["Dashboard", "Bronze -> Validation -> Silver"],
+        ["Dashboard", "Bronze -> Validation -> Silver", "Quality Report"],
         horizontal=True,
         label_visibility="collapsed",
     )
@@ -481,7 +481,10 @@ def load_delta_history(path_str: str) -> pd.DataFrame:
         if "timestamp" in history_df.columns:
             history_df["timestamp"] = pd.to_datetime(history_df["timestamp"], unit='ms', errors="coerce")
             history_df["timestamp"] = history_df["timestamp"].dt.strftime('%Y-%m-%d %H:%M:%S')
-            
+
+        if "version" in history_df.columns:
+            history_df["version"] = history_df["version"].astype(str)
+
         return history_df
     except Exception:
         return pd.DataFrame()
@@ -583,6 +586,7 @@ def render_medallion_section() -> None:
     script_dir = Path(__file__).resolve().parent
     bronze_path = script_dir / "data" / "bronze"
     silver_path = script_dir / "data" / "silver"
+    quarantine_path = script_dir / "data" / "quarantine"
     input_path = script_dir / "data" / "input"
 
     # HYBRID ENGINE: Load real-time data first to avoid "Empty" errors
@@ -664,6 +668,45 @@ def render_medallion_section() -> None:
 
             if event.selection.rows:
                 show_rejection_dialog(validation_df.iloc[event.selection.rows[0]])
+    close_flow_card()
+
+    # --- STEP 2.5: QUARANTINE ---
+    open_flow_card(
+        "Step 2.5: Quarantine (Pipeline-Enforced Rejections)",
+        "Records blocked by the Spark pipeline before reaching Silver. Written to a Delta table with rejection reasons.",
+        "validation",
+    )
+    quarantine_df = pd.DataFrame()
+    if quarantine_path.exists():
+        try:
+            quarantine_df = load_delta_df(str(quarantine_path))
+        except Exception:
+            pass
+
+    if quarantine_df.empty:
+        st.info("No quarantined records yet. Run the pipeline from Airflow to enforce hard validation.")
+    else:
+        reason_col = "rejection_reason"
+        cols_q = st.columns(2)
+        with cols_q[0]:
+            st.metric("Quarantined Records", len(quarantine_df))
+        with cols_q[1]:
+            if reason_col in quarantine_df.columns:
+                breakdown = quarantine_df[reason_col].value_counts().to_dict()
+                st.metric("Distinct Rejection Reasons", len(breakdown))
+
+        if reason_col in quarantine_df.columns:
+            st.markdown("**Rejection Breakdown**")
+            breakdown_df = (
+                quarantine_df[reason_col]
+                .value_counts()
+                .rename_axis("reason")
+                .reset_index(name="count")
+            )
+            st.dataframe(breakdown_df, use_container_width=True, hide_index=True)
+
+        st.markdown("**Rejected Records (sample)**")
+        st.dataframe(quarantine_df.head(50), use_container_width=True)
     close_flow_card()
 
     # --- STEP 3: SILVER ---
@@ -759,15 +802,103 @@ def render_dashboard_home() -> None:
     st.caption(f"Last heartbeat at {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
 
 
+def render_quality_report() -> None:
+    st.title("Data Quality & Validation Report")
+
+    script_dir = Path(__file__).resolve().parent
+    report_path = script_dir / "data" / "quality_report.json"
+
+    if not report_path.exists():
+        st.warning("No quality report found yet. Trigger a pipeline run from Airflow to generate one.")
+        st.info("Run the `daily_pyspark_pipeline` DAG in Airflow, then refresh this page.")
+        return
+
+    with open(report_path) as f:
+        report = __import__("json").load(f)
+
+    overall = report.get("overall_status", "UNKNOWN")
+    generated_at = report.get("generated_at", "")
+
+    status_color = {"PASS": "green", "WARN": "orange", "FAIL": "red"}.get(overall, "gray")
+    status_icon  = {"PASS": "✓", "WARN": "⚠", "FAIL": "✗"}.get(overall, "?")
+
+    st.markdown(
+        f"""
+        <div style="border-radius:12px; padding:1rem 1.5rem; margin-bottom:1rem;
+                    background:{'rgba(34,197,94,0.15)' if overall=='PASS' else 'rgba(249,115,22,0.15)' if overall=='WARN' else 'rgba(239,68,68,0.15)'};
+                    border:1px solid {status_color};">
+            <span style="font-size:2rem; font-weight:700; color:{status_color};">{status_icon} {overall}</span>
+            <span style="margin-left:1.5rem; color:#64748b; font-size:0.9rem;">Generated: {generated_at}</span>
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
+
+    layers = report.get("layers", [])
+
+    # ── Summary row ──────────────────────────────────────────────────────────
+    cols = st.columns(len(layers))
+    for col, layer in zip(cols, layers):
+        s = layer["status"]
+        color = {"PASS": "green", "WARN": "orange", "FAIL": "red"}.get(s, "gray")
+        icon  = {"PASS": "✓", "WARN": "⚠", "FAIL": "✗"}.get(s, "?")
+        with col:
+            st.markdown(
+                f"""<div style="border-radius:10px; padding:0.8rem; text-align:center;
+                               border:1px solid {color}; background:rgba(0,0,0,0.03);">
+                    <div style="font-size:1.4rem; font-weight:700; color:{color};">{icon} {s}</div>
+                    <div style="font-size:1.1rem; font-weight:600;">{layer['layer'].upper()}</div>
+                    <div style="color:#64748b; font-size:0.85rem;">{layer['row_count']:,} rows</div>
+                    <div style="color:#ef4444; font-size:0.8rem;">{layer['critical_failures']} critical</div>
+                    <div style="color:#f97316; font-size:0.8rem;">{layer['warnings']} warnings</div>
+                </div>""",
+                unsafe_allow_html=True,
+            )
+
+    st.divider()
+
+    # ── Per-layer check tables ────────────────────────────────────────────────
+    for layer in layers:
+        with st.expander(f"{layer['layer'].upper()} — {layer['row_count']:,} rows — {layer['status']}", expanded=True):
+            checks = layer.get("checks", [])
+            if not checks:
+                st.info("No checks recorded.")
+                continue
+
+            rows = []
+            for c in checks:
+                icon = {"PASS": "✓", "WARNING": "⚠", "CRITICAL": "✗", "WARN": "⚠"}.get(c["status"], "?")
+                rows.append({"": icon, "Check": c["name"], "Status": c["status"], "Detail": c["message"]})
+
+            df = pd.DataFrame(rows)
+
+            def _color_status(val):
+                return {
+                    "PASS":     "color: green",
+                    "WARNING":  "color: orange",
+                    "CRITICAL": "color: red; font-weight:bold",
+                }.get(val, "")
+
+            st.dataframe(
+                df.style.map(_color_status, subset=["Status"]),
+                use_container_width=True,
+                hide_index=True,
+            )
+
+            st.caption(f"Columns present: {', '.join(layer.get('columns', []))}")
+
+
 def render_dashboard() -> None:
     inject_shared_styles()
     current_view = render_top_nav()
 
     if current_view == "Dashboard":
         render_dashboard_home()
-    else:
+    elif current_view == "Bronze -> Validation -> Silver":
         st.title("Medallion Flow and ACID")
         render_medallion_section()
+    else:
+        render_quality_report()
 
 
 if __name__ == "__main__":

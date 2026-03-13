@@ -239,10 +239,74 @@ def run_bronze_layer(spark: SparkSession, input_path: str, bronze_path: str, log
     return bronze_df
 
 
-def run_silver_layer(spark: SparkSession, bronze_path: str, silver_path: str, logger: logging.Logger) -> DataFrame:
-    logger.info("Silver layer: reading Bronze Delta table from %s", bronze_path)
+def run_quarantine_layer(
+    spark: SparkSession,
+    bronze_path: str,
+    quarantine_path: str,
+    validated_path: str,
+    logger: logging.Logger,
+) -> None:
+    """Split Bronze records into quarantined (invalid) and validated (clean) sets.
+
+    Quarantined rows are written to a dedicated Delta table with a rejection_reason
+    column. Only the clean rows are written to the validated Delta table, which
+    Silver then reads from instead of Bronze.
+    """
+    logger.info("Quarantine layer: reading Bronze Delta table from %s", bronze_path)
     df = spark.read.format("delta").load(bronze_path)
 
+    # Build a single rejection_reason expression — first matching rule wins.
+    rejection_expr = F.lit(None).cast("string")
+
+    if "order_id" in df.columns:
+        rejection_expr = F.when(
+            F.col("order_id").isNull(), F.lit("null_order_id")
+        ).otherwise(rejection_expr)
+
+    if "order_date" in df.columns:
+        rejection_expr = F.when(
+            F.col("order_date").isNull() | (F.trim(F.col("order_date").cast("string")) == ""),
+            F.lit("null_order_date"),
+        ).otherwise(rejection_expr)
+        rejection_expr = F.when(
+            F.col("order_date").isNotNull() & F.to_date(F.col("order_date")).isNull(),
+            F.lit("invalid_order_date_format"),
+        ).otherwise(rejection_expr)
+
+    if "unit_price" in df.columns:
+        rejection_expr = F.when(
+            F.col("unit_price").cast("double") <= 0,
+            F.lit("non_positive_unit_price"),
+        ).otherwise(rejection_expr)
+
+    if "quantity" in df.columns:
+        rejection_expr = F.when(
+            F.col("quantity").cast("double") <= 0,
+            F.lit("non_positive_quantity"),
+        ).otherwise(rejection_expr)
+
+    df_tagged = df.withColumn("rejection_reason", rejection_expr)
+    quarantine_df = df_tagged.filter(F.col("rejection_reason").isNotNull())
+    valid_df = df_tagged.filter(F.col("rejection_reason").isNull()).drop("rejection_reason")
+
+    quarantine_count = quarantine_df.count()
+    valid_count = valid_df.count()
+    logger.info(
+        "Quarantine layer: %d valid | %d quarantined (total Bronze: %d)",
+        valid_count, quarantine_count, valid_count + quarantine_count,
+    )
+
+    if quarantine_count > 0:
+        logger.info("Quarantine layer: writing %d rejected rows to %s", quarantine_count, quarantine_path)
+        write_delta(quarantine_df, quarantine_path, mode="overwrite", evolve_schema=False)
+
+    logger.info("Quarantine layer: writing %d validated rows to %s", valid_count, validated_path)
+    write_delta(valid_df, validated_path, mode="overwrite", evolve_schema=False)
+
+
+def run_silver_layer(spark: SparkSession, source_path: str, silver_path: str, logger: logging.Logger) -> DataFrame:
+    logger.info("Silver layer: reading validated Delta table from %s", source_path)
+    df = spark.read.format("delta").load(source_path)
     metadata_columns = {"ingestion_timestamp", "source_file", "processing_timestamp"}
     business_columns = [c for c in df.columns if c not in metadata_columns]
 
@@ -368,10 +432,12 @@ def main() -> None:
 
     input_path = os.path.join(project_root, "data", "input")
     bronze_path = os.path.join(project_root, "data", "bronze")
+    quarantine_path = os.path.join(project_root, "data", "quarantine")
+    validated_path = os.path.join(project_root, "data", "validated")
     silver_path = os.path.join(project_root, "data", "silver")
     gold_path = os.path.join(project_root, "data", "gold")
 
-    ensure_directories((bronze_path, silver_path, gold_path))
+    ensure_directories((bronze_path, quarantine_path, validated_path, silver_path, gold_path))
 
     logger.info("Starting Medallion pipeline")
     spark = create_spark_session("MedallionPipeline")
@@ -380,7 +446,9 @@ def main() -> None:
         bronze_df = run_bronze_layer(spark, input_path, bronze_path, logger)
         logger.info("Bronze row count: %s", bronze_df.count())
 
-        silver_df = run_silver_layer(spark, bronze_path, silver_path, logger)
+        run_quarantine_layer(spark, bronze_path, quarantine_path, validated_path, logger)
+
+        silver_df = run_silver_layer(spark, validated_path, silver_path, logger)
         logger.info("Silver row count: %s", silver_df.count())
 
         gold_df = run_gold_layer(spark, silver_path, gold_path, logger)

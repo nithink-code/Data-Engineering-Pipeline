@@ -3,7 +3,8 @@ services:
   spark:
     image: apache/spark:3.5.0
     container_name: spark
-    entrypoint: ["tail", "-f", "/dev/null"]
+    user: root
+    entrypoint: ["/bin/bash", "-c", "pip install --quiet delta-spark==3.2.0 importlib_metadata && tail -f /dev/null"]
     ports:
       - "4040:4040"
     volumes:
@@ -35,6 +36,20 @@ services:
       - /var/run/docker.sock:/var/run/docker.sock
     ports:
       - "8081:8080"
+
+  streamlit:
+    image: python:3.11-slim
+    container_name: streamlit-pipeline
+    working_dir: /app
+    command: >
+      bash -c "pip install --quiet streamlit pandas deltalake delta-spark==3.2.0 &&
+               streamlit run dashboard.py --server.port 8501 --server.address 0.0.0.0"
+    volumes:
+      - .:/app
+    ports:
+      - "8502:8501"
+    depends_on:
+      - airflow
 
 volumes:
   airflow-db:

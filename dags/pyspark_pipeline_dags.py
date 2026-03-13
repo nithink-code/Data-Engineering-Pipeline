@@ -37,20 +37,28 @@ SPARK_JOB_PATH = os.environ.get(
     "SPARK_JOB_PATH",
     os.path.join(PROJECT_ROOT, "spark_jobs", "medallion_pipeline.py"),
 )
+QUALITY_CHECK_PATH = os.environ.get(
+    "QUALITY_CHECK_PATH",
+    os.path.join(PROJECT_ROOT, "spark_jobs", "quality_check.py"),
+)
 INPUT_FILE_GLOB = os.environ.get("INPUT_FILE_GLOB", "/data/input/*")
 FS_CONN_ID = os.environ.get("FS_CONN_ID", "fs_default")
 
-def _run_spark_job(**context) -> None:
-    """Execute spark-submit on the running spark container via the Docker SDK.
+SPARK_SUBMIT_CMD = [
+    "/opt/spark/bin/spark-submit",
+    "--packages", "io.delta:delta-spark_2.12:3.2.0",
+    "--conf", "spark.jars.ivy=/tmp/.ivy2",
+    "--conf", "spark.sql.extensions=io.delta.sql.DeltaSparkSessionExtension",
+    "--conf", "spark.sql.catalog.spark_catalog=org.apache.spark.sql.delta.catalog.DeltaCatalog",
+]
 
-    Uses the Python docker SDK instead of the Docker CLI so that API version
-    negotiation is handled automatically, avoiding the 'client too old' error
-    that occurs when the CLI inside the Airflow image is behind the host daemon.
-    """
-    import docker  # imported lazily so the DAG parses even if SDK is mid-install
+
+def _submit_to_spark(script_path: str, context: dict) -> None:
+    """Run a PySpark script inside the running spark container via the Docker SDK."""
+    import docker
 
     ti_log = context["ti"].log
-    ti_log.info("[PIPELINE] Spark job starting | job=%s", SPARK_JOB_PATH)
+    ti_log.info("[PIPELINE] Submitting script to Spark container | script=%s", script_path)
 
     client = docker.from_env()
     try:
@@ -61,20 +69,9 @@ def _run_spark_job(**context) -> None:
             "Start it with: docker compose up -d spark"
         ) from exc
 
-    # exec_create / exec_start lets us stream output AND retrieve the exit code.
-    # --packages downloads the Delta JAR before SparkContext init so that
-    # DeltaCatalog and DeltaSparkSessionExtension are available at startup.
-    # --conf spark.jars.ivy=/tmp/.ivy2 uses a writable cache dir in the container.
     exec_id = client.api.exec_create(
         container.id,
-        [
-            "/opt/spark/bin/spark-submit",
-            "--packages", "io.delta:delta-spark_2.12:3.2.0",
-            "--conf", "spark.jars.ivy=/tmp/.ivy2",
-            "--conf", "spark.sql.extensions=io.delta.sql.DeltaSparkSessionExtension",
-            "--conf", "spark.sql.catalog.spark_catalog=org.apache.spark.sql.delta.catalog.DeltaCatalog",
-            SPARK_JOB_PATH,
-        ],
+        SPARK_SUBMIT_CMD + [script_path],
     )["Id"]
 
     for chunk in client.api.exec_start(exec_id, stream=True):
@@ -83,10 +80,18 @@ def _run_spark_job(**context) -> None:
                 ti_log.info(line)
 
     exit_code = client.api.exec_inspect(exec_id)["ExitCode"]
-    ti_log.info("[PIPELINE] Spark job finished | exit_code=%s", exit_code)
+    ti_log.info("[PIPELINE] Script finished | exit_code=%s | script=%s", exit_code, script_path)
 
     if exit_code != 0:
-        raise RuntimeError(f"spark-submit exited with code {exit_code}")
+        raise RuntimeError(f"spark-submit exited with code {exit_code} for script: {script_path}")
+
+
+def _run_spark_job(**context) -> None:
+    _submit_to_spark(SPARK_JOB_PATH, context)
+
+
+def _run_quality_check(**context) -> None:
+    _submit_to_spark(QUALITY_CHECK_PATH, context)
 
 
 DEFAULT_ARGS = {
@@ -116,13 +121,19 @@ with DAG(
         on_failure_callback=log_task_failure,
     )
 
+    daily_quality_check = PythonOperator(
+        task_id="run_quality_check",
+        python_callable=_run_quality_check,
+        on_failure_callback=log_task_failure,
+    )
+
     daily_finish_log = PythonOperator(
         task_id="log_pipeline_finish",
         python_callable=log_pipeline_finish,
         trigger_rule="all_done",
     )
 
-    daily_start_log >> daily_run_spark >> daily_finish_log
+    daily_start_log >> daily_run_spark >> daily_quality_check >> daily_finish_log
 
 
 with DAG(
@@ -154,10 +165,16 @@ with DAG(
         on_failure_callback=log_task_failure,
     )
 
+    event_quality_check = PythonOperator(
+        task_id="run_quality_check",
+        python_callable=_run_quality_check,
+        on_failure_callback=log_task_failure,
+    )
+
     event_finish_log = PythonOperator(
         task_id="log_pipeline_finish",
         python_callable=log_pipeline_finish,
         trigger_rule="all_done",
     )
 
-    detect_new_input_file >> event_start_log >> event_run_spark >> event_finish_log
+    detect_new_input_file >> event_start_log >> event_run_spark >> event_quality_check >> event_finish_log
