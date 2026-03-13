@@ -6,7 +6,7 @@ import os
 # We add specific JVM options for compatibility with modern Java versions (17, 21, 25+)
 spark = SparkSession.builder \
     .appName("DataEngineeringPipeline") \
-    .config("spark.jars.packages", "io.delta:delta-spark_2.13:4.1.0") \
+    .config("spark.jars.packages", "io.delta:delta-spark_2.12:3.2.0") \
     .config("spark.sql.extensions", "io.delta.sql.DeltaSparkSessionExtension") \
     .config("spark.sql.catalog.spark_catalog", "org.apache.spark.sql.delta.catalog.DeltaCatalog") \
     .config("spark.hadoop.fs.permissions.umask-mode", "000") \

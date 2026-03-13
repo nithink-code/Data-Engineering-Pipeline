@@ -1,0 +1,748 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<ivy-module version="2.0" xmlns:m="http://ant.apache.org/ivy/maven">
+	<info organisation="org.apache.logging.log4j"
+		module="log4j-api"
+		revision="2.25.3"
+		status="release"
+		publication="20251215181923"
+	>
+		<license name="Apache-2.0" url="https://www.apache.org/licenses/LICENSE-2.0.txt" />
+		<description homepage="https://logging.apache.org/log4j/2.x/">
+		The logging API of the Log4j project.
+    Library and application code can log through this API.
+    It contains a simple built-in implementation (`SimpleLogger`) for trivial use cases.
+    Production applications are recommended to use Log4j API in combination with a fully-fledged implementation, such as Log4j Core.
+		</description>
+		<m:properties__bnd-extra-module-options>java.sql;static=true,
+      
+      java.management;static=true,
+      
+      org.jspecify;transitive=false</m:properties__bnd-extra-module-options>
+		<m:properties__bnd-extra-package-options>!sun.reflect,
+      
+      org.jspecify.*;resolution:=optional</m:properties__bnd-extra-package-options>
+		<m:properties__bnd-multi-release>true</m:properties__bnd-multi-release>
+		<m:properties__maven.javadoc.skip>false</m:properties__maven.javadoc.skip>
+		<m:properties__bnd-module-name>org.apache.logging.log4j</m:properties__bnd-module-name>
+		<m:properties__jackson-bom.version>2.19.1</m:properties__jackson-bom.version>
+		<m:properties__jmdns.version>3.6.1</m:properties__jmdns.version>
+		<m:properties__zstd.version>1.5.7-4</m:properties__zstd.version>
+		<m:properties__error-prone-annotations.version>2.38.0</m:properties__error-prone-annotations.version>
+		<m:properties__felix.version>7.0.5</m:properties__felix.version>
+		<m:properties__wiremock.version>2.35.2</m:properties__wiremock.version>
+		<m:properties__jconsole.version>1.7.0</m:properties__jconsole.version>
+		<m:properties__commons-dbcp2.version>2.13.0</m:properties__commons-dbcp2.version>
+		<m:properties__nashorn.version>15.6</m:properties__nashorn.version>
+		<m:properties__javax-servlet-jsp.version>2.3.3</m:properties__javax-servlet-jsp.version>
+		<m:properties__docker-maven-plugin.version>0.46.0</m:properties__docker-maven-plugin.version>
+		<m:properties__system-stubs.version>2.0.3</m:properties__system-stubs.version>
+		<m:properties__jakartaee-bom.version>9.1.0</m:properties__jakartaee-bom.version>
+		<m:properties__java-allocation-instrumenter.version>3.3.4</m:properties__java-allocation-instrumenter.version>
+		<m:properties__javax-inject.version>1</m:properties__javax-inject.version>
+		<m:properties__javax-servlet.version>4.0.1</m:properties__javax-servlet.version>
+		<m:properties__jakarta-mail.version>2.1.3</m:properties__jakarta-mail.version>
+		<m:properties__xmlunit.version>2.10.3</m:properties__xmlunit.version>
+		<m:properties__commons-logging.version>1.3.5</m:properties__commons-logging.version>
+		<m:properties__jspecify.version>1.0.0</m:properties__jspecify.version>
+		<m:properties__commons-lang3.version>3.17.0</m:properties__commons-lang3.version>
+		<m:properties__log4j.version>1.2.17</m:properties__log4j.version>
+		<m:properties__xz.version>1.10</m:properties__xz.version>
+		<m:properties__junit.version>4.13.2</m:properties__junit.version>
+		<m:properties__commons-codec.version>1.18.0</m:properties__commons-codec.version>
+		<m:properties__groovy.version>4.0.27</m:properties__groovy.version>
+		<m:properties__logback.version>1.3.15</m:properties__logback.version>
+		<m:properties__jna.version>5.17.0</m:properties__jna.version>
+		<m:properties__lightcouch.version>0.2.0</m:properties__lightcouch.version>
+		<m:properties__oro.version>2.0.8</m:properties__oro.version>
+		<m:properties__conversant.disruptor.version>1.2.15</m:properties__conversant.disruptor.version>
+		<m:properties__maven.version>3.9.10</m:properties__maven.version>
+		<m:properties__osgi.api.version>6.0.0</m:properties__osgi.api.version>
+		<m:properties__javax-activation.version>1.2.0</m:properties__javax-activation.version>
+		<m:properties__h2.version>2.2.224</m:properties__h2.version>
+		<m:properties__commons-compress.version>1.27.1</m:properties__commons-compress.version>
+		<m:properties__kafka.version>3.9.1</m:properties__kafka.version>
+		<m:properties__HdrHistogram.version>2.2.2</m:properties__HdrHistogram.version>
+		<m:properties__javax-mail.version>1.6.2</m:properties__javax-mail.version>
+		<m:properties__log4j-transform.version>0.2.0</m:properties__log4j-transform.version>
+		<m:properties__cassandra.version>3.11.19</m:properties__cassandra.version>
+		<m:properties__plexus-utils.version>3.6.0</m:properties__plexus-utils.version>
+		<m:properties__jmh.version>1.37</m:properties__jmh.version>
+		<m:properties__byte-buddy.version>1.14.9</m:properties__byte-buddy.version>
+		<m:properties__activemq.version>6.1.7</m:properties__activemq.version>
+		<m:properties__guava.version>33.4.8-jre</m:properties__guava.version>
+		<m:properties__hamcrest.version>3.0</m:properties__hamcrest.version>
+		<m:properties__angus-mail.version>2.0.3</m:properties__angus-mail.version>
+		<m:properties__surefire.version>3.5.2</m:properties__surefire.version>
+		<m:properties__bnd-jpms-module-info>$[bnd-module-name];access=0;modules=&quot;
+      biz.aQute.bnd.annotation,
+      com.google.errorprone.annotations,
+      org.osgi.annotation.bundle,
+      org.osgi.annotation.versioning
+      &quot;</m:properties__bnd-jpms-module-info>
+		<m:properties__log4j2-cachefile-transformer.version>2.15.0</m:properties__log4j2-cachefile-transformer.version>
+		<m:properties__spring-boot.version>2.7.18</m:properties__spring-boot.version>
+		<m:properties__httpclient.version>4.5.14</m:properties__httpclient.version>
+		<m:properties__javax-jms.version>2.0.1</m:properties__javax-jms.version>
+		<m:properties__asciidoctor-maven-plugin.version>2.2.4</m:properties__asciidoctor-maven-plugin.version>
+		<m:properties__osgi.annotation.bundle.version>2.0.0</m:properties__osgi.annotation.bundle.version>
+		<m:properties__asm.version>9.6</m:properties__asm.version>
+		<m:properties__osgi.annotation.versioning.version>1.1.2</m:properties__osgi.annotation.versioning.version>
+		<m:properties__assertj.version>3.27.3</m:properties__assertj.version>
+		<m:properties__disruptor.version>3.4.4</m:properties__disruptor.version>
+		<m:properties__exam-maven-plugin.version>4.14.0</m:properties__exam-maven-plugin.version>
+		<m:properties__angus-activation.version>2.0.2</m:properties__angus-activation.version>
+		<m:properties__commons-io.version>2.19.0</m:properties__commons-io.version>
+		<m:properties__bnd.annotation.version>7.1.0</m:properties__bnd.annotation.version>
+		<m:properties__spring-framework.version>5.3.39</m:properties__spring-framework.version>
+		<m:properties__bsh.version>2.0b6</m:properties__bsh.version>
+		<m:properties__embedded-ldap.version>0.9.0</m:properties__embedded-ldap.version>
+		<m:properties__javax-persistence.version>2.2</m:properties__javax-persistence.version>
+		<m:properties__hsqldb.version>2.7.4</m:properties__hsqldb.version>
+		<m:properties__mockito.version>4.11.0</m:properties__mockito.version>
+		<m:properties__junit-pioneer.version>1.9.1</m:properties__junit-pioneer.version>
+		<m:properties__org.eclipse.persistence.version>2.7.16</m:properties__org.eclipse.persistence.version>
+		<m:properties__httpcore.version>4.4.16</m:properties__httpcore.version>
+		<m:properties__maven-taglib-plugin.version>2.4</m:properties__maven-taglib-plugin.version>
+		<m:properties__pax-exam.version>4.14.0</m:properties__pax-exam.version>
+		<m:properties__jazzer.version>0.24.0</m:properties__jazzer.version>
+		<m:properties__junit-jupiter.version>5.13.2</m:properties__junit-jupiter.version>
+		<m:properties__commons-csv.version>1.14.0</m:properties__commons-csv.version>
+		<m:properties__jeromq.version>0.6.0</m:properties__jeromq.version>
+		<m:properties__cassandra-driver.version>3.11.5</m:properties__cassandra-driver.version>
+		<m:properties__awaitility.version>4.3.0</m:properties__awaitility.version>
+		<m:properties__jakarta-activation.version>2.1.3</m:properties__jakarta-activation.version>
+		<m:properties__org.eclipse.osgi.version>3.23.100</m:properties__org.eclipse.osgi.version>
+		<m:properties__log4j2-ecs-layout.version>1.7.0</m:properties__log4j2-ecs-layout.version>
+		<m:properties__jctools.version>4.0.5</m:properties__jctools.version>
+		<m:properties__velocity.version>1.7</m:properties__velocity.version>
+		<m:properties__commons-pool2.version>2.12.1</m:properties__commons-pool2.version>
+		<m:dependency.management__org.apache.logging.log4j__log4j-1.2-api__version>2.25.3</m:dependency.management__org.apache.logging.log4j__log4j-1.2-api__version>
+		<m:dependency.management__org.apache.logging.log4j__log4j-api__version>2.25.3</m:dependency.management__org.apache.logging.log4j__log4j-api__version>
+		<m:dependency.management__org.apache.logging.log4j__log4j-api-test__version>2.25.3</m:dependency.management__org.apache.logging.log4j__log4j-api-test__version>
+		<m:dependency.management__org.apache.logging.log4j__log4j-appserver__version>2.25.3</m:dependency.management__org.apache.logging.log4j__log4j-appserver__version>
+		<m:dependency.management__org.apache.logging.log4j__log4j-cassandra__version>2.25.3</m:dependency.management__org.apache.logging.log4j__log4j-cassandra__version>
+		<m:dependency.management__org.apache.logging.log4j__log4j-core__version>2.25.3</m:dependency.management__org.apache.logging.log4j__log4j-core__version>
+		<m:dependency.management__org.apache.logging.log4j__log4j-core-test__version>2.25.3</m:dependency.management__org.apache.logging.log4j__log4j-core-test__version>
+		<m:dependency.management__org.apache.logging.log4j__log4j-couchdb__version>2.25.3</m:dependency.management__org.apache.logging.log4j__log4j-couchdb__version>
+		<m:dependency.management__org.apache.logging.log4j__log4j-docker__version>2.25.3</m:dependency.management__org.apache.logging.log4j__log4j-docker__version>
+		<m:dependency.management__org.apache.logging.log4j__log4j-flume-ng__version>2.23.1</m:dependency.management__org.apache.logging.log4j__log4j-flume-ng__version>
+		<m:dependency.management__org.apache.logging.log4j__log4j-iostreams__version>2.25.3</m:dependency.management__org.apache.logging.log4j__log4j-iostreams__version>
+		<m:dependency.management__org.apache.logging.log4j__log4j-jakarta-jms__version>2.25.3</m:dependency.management__org.apache.logging.log4j__log4j-jakarta-jms__version>
+		<m:dependency.management__org.apache.logging.log4j__log4j-jakarta-smtp__version>2.25.3</m:dependency.management__org.apache.logging.log4j__log4j-jakarta-smtp__version>
+		<m:dependency.management__org.apache.logging.log4j__log4j-jakarta-web__version>2.25.3</m:dependency.management__org.apache.logging.log4j__log4j-jakarta-web__version>
+		<m:dependency.management__org.apache.logging.log4j__log4j-jcl__version>2.25.3</m:dependency.management__org.apache.logging.log4j__log4j-jcl__version>
+		<m:dependency.management__org.apache.logging.log4j__log4j-jpa__version>2.25.3</m:dependency.management__org.apache.logging.log4j__log4j-jpa__version>
+		<m:dependency.management__org.apache.logging.log4j__log4j-jpl__version>2.25.3</m:dependency.management__org.apache.logging.log4j__log4j-jpl__version>
+		<m:dependency.management__org.apache.logging.log4j__log4j-jul__version>2.25.3</m:dependency.management__org.apache.logging.log4j__log4j-jul__version>
+		<m:dependency.management__org.apache.logging.log4j__log4j-layout-template-json__version>2.25.3</m:dependency.management__org.apache.logging.log4j__log4j-layout-template-json__version>
+		<m:dependency.management__org.apache.logging.log4j__log4j-mongodb4__version>2.25.3</m:dependency.management__org.apache.logging.log4j__log4j-mongodb4__version>
+		<m:dependency.management__org.apache.logging.log4j__log4j-mongodb__version>2.25.3</m:dependency.management__org.apache.logging.log4j__log4j-mongodb__version>
+		<m:dependency.management__org.apache.logging.log4j__log4j-slf4j2-impl__version>2.25.3</m:dependency.management__org.apache.logging.log4j__log4j-slf4j2-impl__version>
+		<m:dependency.management__org.apache.logging.log4j__log4j-slf4j-impl__version>2.25.3</m:dependency.management__org.apache.logging.log4j__log4j-slf4j-impl__version>
+		<m:dependency.management__org.apache.logging.log4j__log4j-spring-boot__version>2.25.3</m:dependency.management__org.apache.logging.log4j__log4j-spring-boot__version>
+		<m:dependency.management__org.apache.logging.log4j__log4j-spring-cloud-config-client__version>2.25.3</m:dependency.management__org.apache.logging.log4j__log4j-spring-cloud-config-client__version>
+		<m:dependency.management__org.apache.logging.log4j__log4j-taglib__version>2.25.3</m:dependency.management__org.apache.logging.log4j__log4j-taglib__version>
+		<m:dependency.management__org.apache.logging.log4j__log4j-to-jul__version>2.25.3</m:dependency.management__org.apache.logging.log4j__log4j-to-jul__version>
+		<m:dependency.management__org.apache.logging.log4j__log4j-to-slf4j__version>2.25.3</m:dependency.management__org.apache.logging.log4j__log4j-to-slf4j__version>
+		<m:dependency.management__org.apache.logging.log4j__log4j-web__version>2.25.3</m:dependency.management__org.apache.logging.log4j__log4j-web__version>
+		<m:dependency.management__org.apache.logging.log4j__log4j-fuzz-test__version>2.25.3</m:dependency.management__org.apache.logging.log4j__log4j-fuzz-test__version>
+		<m:dependency.management__org.apache.logging.log4j__log4j-layout-template-json-test__version>2.25.3</m:dependency.management__org.apache.logging.log4j__log4j-layout-template-json-test__version>
+		<m:dependency.management__org.apache.groovy__groovy__version>4.0.27</m:dependency.management__org.apache.groovy__groovy__version>
+		<m:dependency.management__org.apache.groovy__groovy-ant__version>4.0.27</m:dependency.management__org.apache.groovy__groovy-ant__version>
+		<m:dependency.management__org.apache.groovy__groovy-astbuilder__version>4.0.27</m:dependency.management__org.apache.groovy__groovy-astbuilder__version>
+		<m:dependency.management__org.apache.groovy__groovy-cli-commons__version>4.0.27</m:dependency.management__org.apache.groovy__groovy-cli-commons__version>
+		<m:dependency.management__org.apache.groovy__groovy-cli-picocli__version>4.0.27</m:dependency.management__org.apache.groovy__groovy-cli-picocli__version>
+		<m:dependency.management__org.apache.groovy__groovy-console__version>4.0.27</m:dependency.management__org.apache.groovy__groovy-console__version>
+		<m:dependency.management__org.apache.groovy__groovy-contracts__version>4.0.27</m:dependency.management__org.apache.groovy__groovy-contracts__version>
+		<m:dependency.management__org.apache.groovy__groovy-datetime__version>4.0.27</m:dependency.management__org.apache.groovy__groovy-datetime__version>
+		<m:dependency.management__org.apache.groovy__groovy-dateutil__version>4.0.27</m:dependency.management__org.apache.groovy__groovy-dateutil__version>
+		<m:dependency.management__org.apache.groovy__groovy-docgenerator__version>4.0.27</m:dependency.management__org.apache.groovy__groovy-docgenerator__version>
+		<m:dependency.management__org.apache.groovy__groovy-ginq__version>4.0.27</m:dependency.management__org.apache.groovy__groovy-ginq__version>
+		<m:dependency.management__org.apache.groovy__groovy-groovydoc__version>4.0.27</m:dependency.management__org.apache.groovy__groovy-groovydoc__version>
+		<m:dependency.management__org.apache.groovy__groovy-groovysh__version>4.0.27</m:dependency.management__org.apache.groovy__groovy-groovysh__version>
+		<m:dependency.management__org.apache.groovy__groovy-jmx__version>4.0.27</m:dependency.management__org.apache.groovy__groovy-jmx__version>
+		<m:dependency.management__org.apache.groovy__groovy-json__version>4.0.27</m:dependency.management__org.apache.groovy__groovy-json__version>
+		<m:dependency.management__org.apache.groovy__groovy-jsr223__version>4.0.27</m:dependency.management__org.apache.groovy__groovy-jsr223__version>
+		<m:dependency.management__org.apache.groovy__groovy-macro__version>4.0.27</m:dependency.management__org.apache.groovy__groovy-macro__version>
+		<m:dependency.management__org.apache.groovy__groovy-macro-library__version>4.0.27</m:dependency.management__org.apache.groovy__groovy-macro-library__version>
+		<m:dependency.management__org.apache.groovy__groovy-nio__version>4.0.27</m:dependency.management__org.apache.groovy__groovy-nio__version>
+		<m:dependency.management__org.apache.groovy__groovy-servlet__version>4.0.27</m:dependency.management__org.apache.groovy__groovy-servlet__version>
+		<m:dependency.management__org.apache.groovy__groovy-sql__version>4.0.27</m:dependency.management__org.apache.groovy__groovy-sql__version>
+		<m:dependency.management__org.apache.groovy__groovy-swing__version>4.0.27</m:dependency.management__org.apache.groovy__groovy-swing__version>
+		<m:dependency.management__org.apache.groovy__groovy-templates__version>4.0.27</m:dependency.management__org.apache.groovy__groovy-templates__version>
+		<m:dependency.management__org.apache.groovy__groovy-test__version>4.0.27</m:dependency.management__org.apache.groovy__groovy-test__version>
+		<m:dependency.management__org.apache.groovy__groovy-test-junit5__version>4.0.27</m:dependency.management__org.apache.groovy__groovy-test-junit5__version>
+		<m:dependency.management__org.apache.groovy__groovy-testng__version>4.0.27</m:dependency.management__org.apache.groovy__groovy-testng__version>
+		<m:dependency.management__org.apache.groovy__groovy-toml__version>4.0.27</m:dependency.management__org.apache.groovy__groovy-toml__version>
+		<m:dependency.management__org.apache.groovy__groovy-typecheckers__version>4.0.27</m:dependency.management__org.apache.groovy__groovy-typecheckers__version>
+		<m:dependency.management__org.apache.groovy__groovy-xml__version>4.0.27</m:dependency.management__org.apache.groovy__groovy-xml__version>
+		<m:dependency.management__org.apache.groovy__groovy-yaml__version>4.0.27</m:dependency.management__org.apache.groovy__groovy-yaml__version>
+		<m:dependency.management__com.fasterxml.jackson.core__jackson-annotations__version>2.19.1</m:dependency.management__com.fasterxml.jackson.core__jackson-annotations__version>
+		<m:dependency.management__com.fasterxml.jackson.core__jackson-core__version>2.19.1</m:dependency.management__com.fasterxml.jackson.core__jackson-core__version>
+		<m:dependency.management__com.fasterxml.jackson.core__jackson-databind__version>2.19.1</m:dependency.management__com.fasterxml.jackson.core__jackson-databind__version>
+		<m:dependency.management__com.fasterxml.jackson.dataformat__jackson-dataformat-avro__version>2.19.1</m:dependency.management__com.fasterxml.jackson.dataformat__jackson-dataformat-avro__version>
+		<m:dependency.management__com.fasterxml.jackson.dataformat__jackson-dataformat-cbor__version>2.19.1</m:dependency.management__com.fasterxml.jackson.dataformat__jackson-dataformat-cbor__version>
+		<m:dependency.management__com.fasterxml.jackson.dataformat__jackson-dataformat-csv__version>2.19.1</m:dependency.management__com.fasterxml.jackson.dataformat__jackson-dataformat-csv__version>
+		<m:dependency.management__com.fasterxml.jackson.dataformat__jackson-dataformat-ion__version>2.19.1</m:dependency.management__com.fasterxml.jackson.dataformat__jackson-dataformat-ion__version>
+		<m:dependency.management__com.fasterxml.jackson.dataformat__jackson-dataformat-properties__version>2.19.1</m:dependency.management__com.fasterxml.jackson.dataformat__jackson-dataformat-properties__version>
+		<m:dependency.management__com.fasterxml.jackson.dataformat__jackson-dataformat-protobuf__version>2.19.1</m:dependency.management__com.fasterxml.jackson.dataformat__jackson-dataformat-protobuf__version>
+		<m:dependency.management__com.fasterxml.jackson.dataformat__jackson-dataformat-smile__version>2.19.1</m:dependency.management__com.fasterxml.jackson.dataformat__jackson-dataformat-smile__version>
+		<m:dependency.management__com.fasterxml.jackson.dataformat__jackson-dataformat-toml__version>2.19.1</m:dependency.management__com.fasterxml.jackson.dataformat__jackson-dataformat-toml__version>
+		<m:dependency.management__com.fasterxml.jackson.dataformat__jackson-dataformat-xml__version>2.19.1</m:dependency.management__com.fasterxml.jackson.dataformat__jackson-dataformat-xml__version>
+		<m:dependency.management__com.fasterxml.jackson.dataformat__jackson-dataformat-yaml__version>2.19.1</m:dependency.management__com.fasterxml.jackson.dataformat__jackson-dataformat-yaml__version>
+		<m:dependency.management__com.fasterxml.jackson.datatype__jackson-datatype-eclipse-collections__version>2.19.1</m:dependency.management__com.fasterxml.jackson.datatype__jackson-datatype-eclipse-collections__version>
+		<m:dependency.management__com.fasterxml.jackson.datatype__jackson-datatype-guava__version>2.19.1</m:dependency.management__com.fasterxml.jackson.datatype__jackson-datatype-guava__version>
+		<m:dependency.management__com.fasterxml.jackson.datatype__jackson-datatype-hibernate4__version>2.19.1</m:dependency.management__com.fasterxml.jackson.datatype__jackson-datatype-hibernate4__version>
+		<m:dependency.management__com.fasterxml.jackson.datatype__jackson-datatype-hibernate5__version>2.19.1</m:dependency.management__com.fasterxml.jackson.datatype__jackson-datatype-hibernate5__version>
+		<m:dependency.management__com.fasterxml.jackson.datatype__jackson-datatype-hibernate5-jakarta__version>2.19.1</m:dependency.management__com.fasterxml.jackson.datatype__jackson-datatype-hibernate5-jakarta__version>
+		<m:dependency.management__com.fasterxml.jackson.datatype__jackson-datatype-hibernate6__version>2.19.1</m:dependency.management__com.fasterxml.jackson.datatype__jackson-datatype-hibernate6__version>
+		<m:dependency.management__com.fasterxml.jackson.datatype__jackson-datatype-hppc__version>2.19.1</m:dependency.management__com.fasterxml.jackson.datatype__jackson-datatype-hppc__version>
+		<m:dependency.management__com.fasterxml.jackson.datatype__jackson-datatype-jakarta-jsonp__version>2.19.1</m:dependency.management__com.fasterxml.jackson.datatype__jackson-datatype-jakarta-jsonp__version>
+		<m:dependency.management__com.fasterxml.jackson.datatype__jackson-datatype-jaxrs__version>2.19.1</m:dependency.management__com.fasterxml.jackson.datatype__jackson-datatype-jaxrs__version>
+		<m:dependency.management__com.fasterxml.jackson.datatype__jackson-datatype-javax-money__version>2.19.1</m:dependency.management__com.fasterxml.jackson.datatype__jackson-datatype-javax-money__version>
+		<m:dependency.management__com.fasterxml.jackson.datatype__jackson-datatype-jdk8__version>2.19.1</m:dependency.management__com.fasterxml.jackson.datatype__jackson-datatype-jdk8__version>
+		<m:dependency.management__com.fasterxml.jackson.datatype__jackson-datatype-joda__version>2.19.1</m:dependency.management__com.fasterxml.jackson.datatype__jackson-datatype-joda__version>
+		<m:dependency.management__com.fasterxml.jackson.datatype__jackson-datatype-joda-money__version>2.19.1</m:dependency.management__com.fasterxml.jackson.datatype__jackson-datatype-joda-money__version>
+		<m:dependency.management__com.fasterxml.jackson.datatype__jackson-datatype-json-org__version>2.19.1</m:dependency.management__com.fasterxml.jackson.datatype__jackson-datatype-json-org__version>
+		<m:dependency.management__com.fasterxml.jackson.datatype__jackson-datatype-jsr310__version>2.19.1</m:dependency.management__com.fasterxml.jackson.datatype__jackson-datatype-jsr310__version>
+		<m:dependency.management__com.fasterxml.jackson.datatype__jackson-datatype-jsr353__version>2.19.1</m:dependency.management__com.fasterxml.jackson.datatype__jackson-datatype-jsr353__version>
+		<m:dependency.management__com.fasterxml.jackson.datatype__jackson-datatype-moneta__version>2.19.1</m:dependency.management__com.fasterxml.jackson.datatype__jackson-datatype-moneta__version>
+		<m:dependency.management__com.fasterxml.jackson.datatype__jackson-datatype-pcollections__version>2.19.1</m:dependency.management__com.fasterxml.jackson.datatype__jackson-datatype-pcollections__version>
+		<m:dependency.management__com.fasterxml.jackson.jaxrs__jackson-jaxrs-base__version>2.19.1</m:dependency.management__com.fasterxml.jackson.jaxrs__jackson-jaxrs-base__version>
+		<m:dependency.management__com.fasterxml.jackson.jaxrs__jackson-jaxrs-cbor-provider__version>2.19.1</m:dependency.management__com.fasterxml.jackson.jaxrs__jackson-jaxrs-cbor-provider__version>
+		<m:dependency.management__com.fasterxml.jackson.jaxrs__jackson-jaxrs-json-provider__version>2.19.1</m:dependency.management__com.fasterxml.jackson.jaxrs__jackson-jaxrs-json-provider__version>
+		<m:dependency.management__com.fasterxml.jackson.jaxrs__jackson-jaxrs-smile-provider__version>2.19.1</m:dependency.management__com.fasterxml.jackson.jaxrs__jackson-jaxrs-smile-provider__version>
+		<m:dependency.management__com.fasterxml.jackson.jaxrs__jackson-jaxrs-xml-provider__version>2.19.1</m:dependency.management__com.fasterxml.jackson.jaxrs__jackson-jaxrs-xml-provider__version>
+		<m:dependency.management__com.fasterxml.jackson.jaxrs__jackson-jaxrs-yaml-provider__version>2.19.1</m:dependency.management__com.fasterxml.jackson.jaxrs__jackson-jaxrs-yaml-provider__version>
+		<m:dependency.management__com.fasterxml.jackson.jakarta.rs__jackson-jakarta-rs-base__version>2.19.1</m:dependency.management__com.fasterxml.jackson.jakarta.rs__jackson-jakarta-rs-base__version>
+		<m:dependency.management__com.fasterxml.jackson.jakarta.rs__jackson-jakarta-rs-cbor-provider__version>2.19.1</m:dependency.management__com.fasterxml.jackson.jakarta.rs__jackson-jakarta-rs-cbor-provider__version>
+		<m:dependency.management__com.fasterxml.jackson.jakarta.rs__jackson-jakarta-rs-json-provider__version>2.19.1</m:dependency.management__com.fasterxml.jackson.jakarta.rs__jackson-jakarta-rs-json-provider__version>
+		<m:dependency.management__com.fasterxml.jackson.jakarta.rs__jackson-jakarta-rs-smile-provider__version>2.19.1</m:dependency.management__com.fasterxml.jackson.jakarta.rs__jackson-jakarta-rs-smile-provider__version>
+		<m:dependency.management__com.fasterxml.jackson.jakarta.rs__jackson-jakarta-rs-xml-provider__version>2.19.1</m:dependency.management__com.fasterxml.jackson.jakarta.rs__jackson-jakarta-rs-xml-provider__version>
+		<m:dependency.management__com.fasterxml.jackson.jakarta.rs__jackson-jakarta-rs-yaml-provider__version>2.19.1</m:dependency.management__com.fasterxml.jackson.jakarta.rs__jackson-jakarta-rs-yaml-provider__version>
+		<m:dependency.management__com.fasterxml.jackson.jr__jackson-jr-all__version>2.19.1</m:dependency.management__com.fasterxml.jackson.jr__jackson-jr-all__version>
+		<m:dependency.management__com.fasterxml.jackson.jr__jackson-jr-annotation-support__version>2.19.1</m:dependency.management__com.fasterxml.jackson.jr__jackson-jr-annotation-support__version>
+		<m:dependency.management__com.fasterxml.jackson.jr__jackson-jr-extension-javatime__version>2.19.1</m:dependency.management__com.fasterxml.jackson.jr__jackson-jr-extension-javatime__version>
+		<m:dependency.management__com.fasterxml.jackson.jr__jackson-jr-objects__version>2.19.1</m:dependency.management__com.fasterxml.jackson.jr__jackson-jr-objects__version>
+		<m:dependency.management__com.fasterxml.jackson.jr__jackson-jr-retrofit2__version>2.19.1</m:dependency.management__com.fasterxml.jackson.jr__jackson-jr-retrofit2__version>
+		<m:dependency.management__com.fasterxml.jackson.jr__jackson-jr-stree__version>2.19.1</m:dependency.management__com.fasterxml.jackson.jr__jackson-jr-stree__version>
+		<m:dependency.management__com.fasterxml.jackson.module__jackson-module-afterburner__version>2.19.1</m:dependency.management__com.fasterxml.jackson.module__jackson-module-afterburner__version>
+		<m:dependency.management__com.fasterxml.jackson.module__jackson-module-android-record__version>2.19.1</m:dependency.management__com.fasterxml.jackson.module__jackson-module-android-record__version>
+		<m:dependency.management__com.fasterxml.jackson.module__jackson-module-blackbird__version>2.19.1</m:dependency.management__com.fasterxml.jackson.module__jackson-module-blackbird__version>
+		<m:dependency.management__com.fasterxml.jackson.module__jackson-module-guice__version>2.19.1</m:dependency.management__com.fasterxml.jackson.module__jackson-module-guice__version>
+		<m:dependency.management__com.fasterxml.jackson.module__jackson-module-guice7__version>2.19.1</m:dependency.management__com.fasterxml.jackson.module__jackson-module-guice7__version>
+		<m:dependency.management__com.fasterxml.jackson.module__jackson-module-jaxb-annotations__version>2.19.1</m:dependency.management__com.fasterxml.jackson.module__jackson-module-jaxb-annotations__version>
+		<m:dependency.management__com.fasterxml.jackson.module__jackson-module-jakarta-xmlbind-annotations__version>2.19.1</m:dependency.management__com.fasterxml.jackson.module__jackson-module-jakarta-xmlbind-annotations__version>
+		<m:dependency.management__com.fasterxml.jackson.module__jackson-module-jsonSchema__version>2.19.1</m:dependency.management__com.fasterxml.jackson.module__jackson-module-jsonSchema__version>
+		<m:dependency.management__com.fasterxml.jackson.module__jackson-module-jsonSchema-jakarta__version>2.19.1</m:dependency.management__com.fasterxml.jackson.module__jackson-module-jsonSchema-jakarta__version>
+		<m:dependency.management__com.fasterxml.jackson.module__jackson-module-kotlin__version>2.19.1</m:dependency.management__com.fasterxml.jackson.module__jackson-module-kotlin__version>
+		<m:dependency.management__com.fasterxml.jackson.module__jackson-module-mrbean__version>2.19.1</m:dependency.management__com.fasterxml.jackson.module__jackson-module-mrbean__version>
+		<m:dependency.management__com.fasterxml.jackson.module__jackson-module-no-ctor-deser__version>2.19.1</m:dependency.management__com.fasterxml.jackson.module__jackson-module-no-ctor-deser__version>
+		<m:dependency.management__com.fasterxml.jackson.module__jackson-module-osgi__version>2.19.1</m:dependency.management__com.fasterxml.jackson.module__jackson-module-osgi__version>
+		<m:dependency.management__com.fasterxml.jackson.module__jackson-module-parameter-names__version>2.19.1</m:dependency.management__com.fasterxml.jackson.module__jackson-module-parameter-names__version>
+		<m:dependency.management__com.fasterxml.jackson.module__jackson-module-paranamer__version>2.19.1</m:dependency.management__com.fasterxml.jackson.module__jackson-module-paranamer__version>
+		<m:dependency.management__com.fasterxml.jackson.module__jackson-module-scala_2.11__version>2.19.1</m:dependency.management__com.fasterxml.jackson.module__jackson-module-scala_2.11__version>
+		<m:dependency.management__com.fasterxml.jackson.module__jackson-module-scala_2.12__version>2.19.1</m:dependency.management__com.fasterxml.jackson.module__jackson-module-scala_2.12__version>
+		<m:dependency.management__com.fasterxml.jackson.module__jackson-module-scala_2.13__version>2.19.1</m:dependency.management__com.fasterxml.jackson.module__jackson-module-scala_2.13__version>
+		<m:dependency.management__com.fasterxml.jackson.module__jackson-module-scala_3__version>2.19.1</m:dependency.management__com.fasterxml.jackson.module__jackson-module-scala_3__version>
+		<m:dependency.management__jakarta.servlet__jakarta.servlet-api__version>5.0.0</m:dependency.management__jakarta.servlet__jakarta.servlet-api__version>
+		<m:dependency.management__jakarta.servlet.jsp__jakarta.servlet.jsp-api__version>3.0.0</m:dependency.management__jakarta.servlet.jsp__jakarta.servlet.jsp-api__version>
+		<m:dependency.management__jakarta.el__jakarta.el-api__version>4.0.0</m:dependency.management__jakarta.el__jakarta.el-api__version>
+		<m:dependency.management__jakarta.servlet.jsp.jstl__jakarta.servlet.jsp.jstl-api__version>2.0.0</m:dependency.management__jakarta.servlet.jsp.jstl__jakarta.servlet.jsp.jstl-api__version>
+		<m:dependency.management__jakarta.faces__jakarta.faces-api__version>3.0.0</m:dependency.management__jakarta.faces__jakarta.faces-api__version>
+		<m:dependency.management__jakarta.ws.rs__jakarta.ws.rs-api__version>3.0.0</m:dependency.management__jakarta.ws.rs__jakarta.ws.rs-api__version>
+		<m:dependency.management__jakarta.websocket__jakarta.websocket-api__version>2.0.0</m:dependency.management__jakarta.websocket__jakarta.websocket-api__version>
+		<m:dependency.management__jakarta.json__jakarta.json-api__version>2.0.1</m:dependency.management__jakarta.json__jakarta.json-api__version>
+		<m:dependency.management__jakarta.json.bind__jakarta.json.bind-api__version>2.0.0</m:dependency.management__jakarta.json.bind__jakarta.json.bind-api__version>
+		<m:dependency.management__jakarta.annotation__jakarta.annotation-api__version>2.0.0</m:dependency.management__jakarta.annotation__jakarta.annotation-api__version>
+		<m:dependency.management__jakarta.ejb__jakarta.ejb-api__version>4.0.0</m:dependency.management__jakarta.ejb__jakarta.ejb-api__version>
+		<m:dependency.management__jakarta.transaction__jakarta.transaction-api__version>2.0.0</m:dependency.management__jakarta.transaction__jakarta.transaction-api__version>
+		<m:dependency.management__jakarta.persistence__jakarta.persistence-api__version>3.0.0</m:dependency.management__jakarta.persistence__jakarta.persistence-api__version>
+		<m:dependency.management__jakarta.validation__jakarta.validation-api__version>3.0.0</m:dependency.management__jakarta.validation__jakarta.validation-api__version>
+		<m:dependency.management__jakarta.interceptor__jakarta.interceptor-api__version>2.0.0</m:dependency.management__jakarta.interceptor__jakarta.interceptor-api__version>
+		<m:dependency.management__jakarta.enterprise__jakarta.enterprise.cdi-api__version>3.0.0</m:dependency.management__jakarta.enterprise__jakarta.enterprise.cdi-api__version>
+		<m:dependency.management__jakarta.inject__jakarta.inject-api__version>2.0.0</m:dependency.management__jakarta.inject__jakarta.inject-api__version>
+		<m:dependency.management__jakarta.authentication__jakarta.authentication-api__version>2.0.0</m:dependency.management__jakarta.authentication__jakarta.authentication-api__version>
+		<m:dependency.management__jakarta.security.enterprise__jakarta.security.enterprise-api__version>2.0.0</m:dependency.management__jakarta.security.enterprise__jakarta.security.enterprise-api__version>
+		<m:dependency.management__jakarta.jms__jakarta.jms-api__version>3.0.0</m:dependency.management__jakarta.jms__jakarta.jms-api__version>
+		<m:dependency.management__jakarta.activation__jakarta.activation-api__version>2.1.3</m:dependency.management__jakarta.activation__jakarta.activation-api__version>
+		<m:dependency.management__jakarta.mail__jakarta.mail-api__version>2.1.3</m:dependency.management__jakarta.mail__jakarta.mail-api__version>
+		<m:dependency.management__com.sun.mail__jakarta.mail__version>2.0.1</m:dependency.management__com.sun.mail__jakarta.mail__version>
+		<m:dependency.management__jakarta.resource__jakarta.resource-api__version>2.0.0</m:dependency.management__jakarta.resource__jakarta.resource-api__version>
+		<m:dependency.management__jakarta.authorization__jakarta.authorization-api__version>2.0.0</m:dependency.management__jakarta.authorization__jakarta.authorization-api__version>
+		<m:dependency.management__jakarta.enterprise.concurrent__jakarta.enterprise.concurrent-api__version>2.0.0</m:dependency.management__jakarta.enterprise.concurrent__jakarta.enterprise.concurrent-api__version>
+		<m:dependency.management__jakarta.batch__jakarta.batch-api__version>2.0.0</m:dependency.management__jakarta.batch__jakarta.batch-api__version>
+		<m:dependency.management__jakarta.xml.bind__jakarta.xml.bind-api__version>3.0.1</m:dependency.management__jakarta.xml.bind__jakarta.xml.bind-api__version>
+		<m:dependency.management__jakarta.xml.ws__jakarta.xml.ws-api__version>3.0.1</m:dependency.management__jakarta.xml.ws__jakarta.xml.ws-api__version>
+		<m:dependency.management__jakarta.jws__jakarta.jws-api__version>3.0.0</m:dependency.management__jakarta.jws__jakarta.jws-api__version>
+		<m:dependency.management__jakarta.xml.soap__jakarta.xml.soap-api__version>2.0.1</m:dependency.management__jakarta.xml.soap__jakarta.xml.soap-api__version>
+		<m:dependency.management__org.junit.jupiter__junit-jupiter__version>5.13.2</m:dependency.management__org.junit.jupiter__junit-jupiter__version>
+		<m:dependency.management__org.junit.jupiter__junit-jupiter-api__version>5.13.2</m:dependency.management__org.junit.jupiter__junit-jupiter-api__version>
+		<m:dependency.management__org.junit.jupiter__junit-jupiter-engine__version>5.13.2</m:dependency.management__org.junit.jupiter__junit-jupiter-engine__version>
+		<m:dependency.management__org.junit.jupiter__junit-jupiter-migrationsupport__version>5.13.2</m:dependency.management__org.junit.jupiter__junit-jupiter-migrationsupport__version>
+		<m:dependency.management__org.junit.jupiter__junit-jupiter-params__version>5.13.2</m:dependency.management__org.junit.jupiter__junit-jupiter-params__version>
+		<m:dependency.management__org.junit.platform__junit-platform-commons__version>1.13.2</m:dependency.management__org.junit.platform__junit-platform-commons__version>
+		<m:dependency.management__org.junit.platform__junit-platform-console__version>1.13.2</m:dependency.management__org.junit.platform__junit-platform-console__version>
+		<m:dependency.management__org.junit.platform__junit-platform-engine__version>1.13.2</m:dependency.management__org.junit.platform__junit-platform-engine__version>
+		<m:dependency.management__org.junit.platform__junit-platform-jfr__version>1.13.2</m:dependency.management__org.junit.platform__junit-platform-jfr__version>
+		<m:dependency.management__org.junit.platform__junit-platform-launcher__version>1.13.2</m:dependency.management__org.junit.platform__junit-platform-launcher__version>
+		<m:dependency.management__org.junit.platform__junit-platform-reporting__version>1.13.2</m:dependency.management__org.junit.platform__junit-platform-reporting__version>
+		<m:dependency.management__org.junit.platform__junit-platform-runner__version>1.13.2</m:dependency.management__org.junit.platform__junit-platform-runner__version>
+		<m:dependency.management__org.junit.platform__junit-platform-suite__version>1.13.2</m:dependency.management__org.junit.platform__junit-platform-suite__version>
+		<m:dependency.management__org.junit.platform__junit-platform-suite-api__version>1.13.2</m:dependency.management__org.junit.platform__junit-platform-suite-api__version>
+		<m:dependency.management__org.junit.platform__junit-platform-suite-commons__version>1.13.2</m:dependency.management__org.junit.platform__junit-platform-suite-commons__version>
+		<m:dependency.management__org.junit.platform__junit-platform-suite-engine__version>1.13.2</m:dependency.management__org.junit.platform__junit-platform-suite-engine__version>
+		<m:dependency.management__org.junit.platform__junit-platform-testkit__version>1.13.2</m:dependency.management__org.junit.platform__junit-platform-testkit__version>
+		<m:dependency.management__org.junit.vintage__junit-vintage-engine__version>5.13.2</m:dependency.management__org.junit.vintage__junit-vintage-engine__version>
+		<m:dependency.management__org.mockito__mockito-core__version>4.11.0</m:dependency.management__org.mockito__mockito-core__version>
+		<m:dependency.management__org.mockito__mockito-android__version>4.11.0</m:dependency.management__org.mockito__mockito-android__version>
+		<m:dependency.management__org.mockito__mockito-errorprone__version>4.11.0</m:dependency.management__org.mockito__mockito-errorprone__version>
+		<m:dependency.management__org.mockito__mockito-inline__version>4.11.0</m:dependency.management__org.mockito__mockito-inline__version>
+		<m:dependency.management__org.mockito__mockito-junit-jupiter__version>4.11.0</m:dependency.management__org.mockito__mockito-junit-jupiter__version>
+		<m:dependency.management__org.mockito__mockito-proxy__version>4.11.0</m:dependency.management__org.mockito__mockito-proxy__version>
+		<m:dependency.management__org.mockito__mockito-subclass__version>4.11.0</m:dependency.management__org.mockito__mockito-subclass__version>
+		<m:dependency.management__org.springframework__spring-aop__version>5.3.39</m:dependency.management__org.springframework__spring-aop__version>
+		<m:dependency.management__org.springframework__spring-aspects__version>5.3.39</m:dependency.management__org.springframework__spring-aspects__version>
+		<m:dependency.management__org.springframework__spring-beans__version>5.3.39</m:dependency.management__org.springframework__spring-beans__version>
+		<m:dependency.management__org.springframework__spring-context__version>5.3.39</m:dependency.management__org.springframework__spring-context__version>
+		<m:dependency.management__org.springframework__spring-context-indexer__version>5.3.39</m:dependency.management__org.springframework__spring-context-indexer__version>
+		<m:dependency.management__org.springframework__spring-context-support__version>5.3.39</m:dependency.management__org.springframework__spring-context-support__version>
+		<m:dependency.management__org.springframework__spring-core__version>5.3.39</m:dependency.management__org.springframework__spring-core__version>
+		<m:dependency.management__org.springframework__spring-expression__version>5.3.39</m:dependency.management__org.springframework__spring-expression__version>
+		<m:dependency.management__org.springframework__spring-instrument__version>5.3.39</m:dependency.management__org.springframework__spring-instrument__version>
+		<m:dependency.management__org.springframework__spring-jcl__version>5.3.39</m:dependency.management__org.springframework__spring-jcl__version>
+		<m:dependency.management__org.springframework__spring-jdbc__version>5.3.39</m:dependency.management__org.springframework__spring-jdbc__version>
+		<m:dependency.management__org.springframework__spring-jms__version>5.3.39</m:dependency.management__org.springframework__spring-jms__version>
+		<m:dependency.management__org.springframework__spring-messaging__version>5.3.39</m:dependency.management__org.springframework__spring-messaging__version>
+		<m:dependency.management__org.springframework__spring-orm__version>5.3.39</m:dependency.management__org.springframework__spring-orm__version>
+		<m:dependency.management__org.springframework__spring-oxm__version>5.3.39</m:dependency.management__org.springframework__spring-oxm__version>
+		<m:dependency.management__org.springframework__spring-r2dbc__version>5.3.39</m:dependency.management__org.springframework__spring-r2dbc__version>
+		<m:dependency.management__org.springframework__spring-test__version>5.3.39</m:dependency.management__org.springframework__spring-test__version>
+		<m:dependency.management__org.springframework__spring-tx__version>5.3.39</m:dependency.management__org.springframework__spring-tx__version>
+		<m:dependency.management__org.springframework__spring-web__version>5.3.39</m:dependency.management__org.springframework__spring-web__version>
+		<m:dependency.management__org.springframework__spring-webflux__version>5.3.39</m:dependency.management__org.springframework__spring-webflux__version>
+		<m:dependency.management__org.springframework__spring-webmvc__version>5.3.39</m:dependency.management__org.springframework__spring-webmvc__version>
+		<m:dependency.management__org.springframework__spring-websocket__version>5.3.39</m:dependency.management__org.springframework__spring-websocket__version>
+		<m:dependency.management__org.apache.logging.log4j__log4j-api-java9__version>2.25.3</m:dependency.management__org.apache.logging.log4j__log4j-api-java9__version>
+		<m:dependency.management__org.apache.logging.log4j__log4j-core-java9__version>2.25.3</m:dependency.management__org.apache.logging.log4j__log4j-core-java9__version>
+		<m:dependency.management__org.apache.logging.log4j__log4j-transform-maven-shade-plugin-extensions__version>0.2.0</m:dependency.management__org.apache.logging.log4j__log4j-transform-maven-shade-plugin-extensions__version>
+		<m:dependency.management__org.apache.activemq__activemq-broker__version>6.1.7</m:dependency.management__org.apache.activemq__activemq-broker__version>
+		<m:dependency.management__org.eclipse.angus__angus-activation__version>2.0.2</m:dependency.management__org.eclipse.angus__angus-activation__version>
+		<m:dependency.management__org.assertj__assertj-core__version>3.27.3</m:dependency.management__org.assertj__assertj-core__version>
+		<m:dependency.management__org.awaitility__awaitility__version>4.3.0</m:dependency.management__org.awaitility__awaitility__version>
+		<m:dependency.management__com.code-intelligence__jazzer__version>0.24.0</m:dependency.management__com.code-intelligence__jazzer__version>
+		<m:dependency.management__com.code-intelligence__jazzer-api__version>0.24.0</m:dependency.management__com.code-intelligence__jazzer-api__version>
+		<m:dependency.management__org.apache-extras.beanshell__bsh__version>2.0b6</m:dependency.management__org.apache-extras.beanshell__bsh__version>
+		<m:dependency.management__org.apache.cassandra__cassandra-all__version>3.11.19</m:dependency.management__org.apache.cassandra__cassandra-all__version>
+		<m:dependency.management__org.apache.cassandra__cassandra-all__exclusion_0>org.slf4j__jcl-over-slf4j</m:dependency.management__org.apache.cassandra__cassandra-all__exclusion_0>
+		<m:dependency.management__org.apache.cassandra__cassandra-all__exclusion_1>org.slf4j__log4j-over-slf4j</m:dependency.management__org.apache.cassandra__cassandra-all__exclusion_1>
+		<m:dependency.management__org.apache.cassandra__cassandra-all__exclusion_2>ch.qos.logback__logback-classic</m:dependency.management__org.apache.cassandra__cassandra-all__exclusion_2>
+		<m:dependency.management__org.apache.cassandra__cassandra-all__exclusion_3>ch.qos.logback__logback-core</m:dependency.management__org.apache.cassandra__cassandra-all__exclusion_3>
+		<m:dependency.management__com.datastax.cassandra__cassandra-driver-core__version>3.11.5</m:dependency.management__com.datastax.cassandra__cassandra-driver-core__version>
+		<m:dependency.management__org.apache.cassandra__cassandra-thrift__version>3.11.19</m:dependency.management__org.apache.cassandra__cassandra-thrift__version>
+		<m:dependency.management__org.apache.cassandra__cassandra-thrift__exclusion_0>org.slf4j__jcl-over-slf4j</m:dependency.management__org.apache.cassandra__cassandra-thrift__exclusion_0>
+		<m:dependency.management__org.apache.cassandra__cassandra-thrift__exclusion_1>org.slf4j__log4j-over-slf4j</m:dependency.management__org.apache.cassandra__cassandra-thrift__exclusion_1>
+		<m:dependency.management__commons-codec__commons-codec__version>1.18.0</m:dependency.management__commons-codec__commons-codec__version>
+		<m:dependency.management__org.apache.commons__commons-compress__version>1.27.1</m:dependency.management__org.apache.commons__commons-compress__version>
+		<m:dependency.management__org.apache.commons__commons-csv__version>1.14.0</m:dependency.management__org.apache.commons__commons-csv__version>
+		<m:dependency.management__org.apache.commons__commons-dbcp2__version>2.13.0</m:dependency.management__org.apache.commons__commons-dbcp2__version>
+		<m:dependency.management__commons-io__commons-io__version>2.19.0</m:dependency.management__commons-io__commons-io__version>
+		<m:dependency.management__org.apache.commons__commons-lang3__version>3.17.0</m:dependency.management__org.apache.commons__commons-lang3__version>
+		<m:dependency.management__commons-logging__commons-logging__version>1.3.5</m:dependency.management__commons-logging__commons-logging__version>
+		<m:dependency.management__org.apache.commons__commons-pool2__version>2.12.1</m:dependency.management__org.apache.commons__commons-pool2__version>
+		<m:dependency.management__com.conversantmedia__disruptor__version>1.2.15</m:dependency.management__com.conversantmedia__disruptor__version>
+		<m:dependency.management__com.lmax__disruptor__version>3.4.4</m:dependency.management__com.lmax__disruptor__version>
+		<m:dependency.management__org.zapodot__embedded-ldap-junit__version>0.9.0</m:dependency.management__org.zapodot__embedded-ldap-junit__version>
+		<m:dependency.management__com.google.guava__guava__version>33.4.8-jre</m:dependency.management__com.google.guava__guava__version>
+		<m:dependency.management__com.google.guava__guava-testlib__version>33.4.8-jre</m:dependency.management__com.google.guava__guava-testlib__version>
+		<m:dependency.management__com.h2database__h2__version>2.2.224</m:dependency.management__com.h2database__h2__version>
+		<m:dependency.management__org.hamcrest__hamcrest__version>3.0</m:dependency.management__org.hamcrest__hamcrest__version>
+		<m:dependency.management__org.hamcrest__hamcrest-core__version>3.0</m:dependency.management__org.hamcrest__hamcrest-core__version>
+		<m:dependency.management__org.hamcrest__hamcrest-library__version>3.0</m:dependency.management__org.hamcrest__hamcrest-library__version>
+		<m:dependency.management__org.hdrhistogram__HdrHistogram__version>2.2.2</m:dependency.management__org.hdrhistogram__HdrHistogram__version>
+		<m:dependency.management__org.hsqldb__hsqldb__version>2.7.4</m:dependency.management__org.hsqldb__hsqldb__version>
+		<m:dependency.management__org.apache.httpcomponents__httpclient__version>4.5.14</m:dependency.management__org.apache.httpcomponents__httpclient__version>
+		<m:dependency.management__org.apache.httpcomponents__httpcore__version>4.4.16</m:dependency.management__org.apache.httpcomponents__httpcore__version>
+		<m:dependency.management__org.eclipse.angus__jakarta.mail__version>2.0.3</m:dependency.management__org.eclipse.angus__jakarta.mail__version>
+		<m:dependency.management__com.google.code.java-allocation-instrumenter__java-allocation-instrumenter__version>3.3.4</m:dependency.management__com.google.code.java-allocation-instrumenter__java-allocation-instrumenter__version>
+		<m:dependency.management__javax.activation__javax.activation-api__version>1.2.0</m:dependency.management__javax.activation__javax.activation-api__version>
+		<m:dependency.management__javax.inject__javax.inject__version>1</m:dependency.management__javax.inject__javax.inject__version>
+		<m:dependency.management__javax.jms__javax.jms-api__version>2.0.1</m:dependency.management__javax.jms__javax.jms-api__version>
+		<m:dependency.management__com.sun.mail__javax.mail__version>1.6.2</m:dependency.management__com.sun.mail__javax.mail__version>
+		<m:dependency.management__javax.mail__javax.mail-api__version>1.6.2</m:dependency.management__javax.mail__javax.mail-api__version>
+		<m:dependency.management__javax.persistence__javax.persistence-api__version>2.2</m:dependency.management__javax.persistence__javax.persistence-api__version>
+		<m:dependency.management__javax.servlet.jsp__javax.servlet.jsp-api__version>2.3.3</m:dependency.management__javax.servlet.jsp__javax.servlet.jsp-api__version>
+		<m:dependency.management__javax.servlet__javax.servlet-api__version>4.0.1</m:dependency.management__javax.servlet__javax.servlet-api__version>
+		<m:dependency.management__com.sun__jconsole__version>1.7.0</m:dependency.management__com.sun__jconsole__version>
+		<m:dependency.management__org.jctools__jctools-core__version>4.0.5</m:dependency.management__org.jctools__jctools-core__version>
+		<m:dependency.management__org.zeromq__jeromq__version>0.6.0</m:dependency.management__org.zeromq__jeromq__version>
+		<m:dependency.management__org.jmdns__jmdns__version>3.6.1</m:dependency.management__org.jmdns__jmdns__version>
+		<m:dependency.management__org.openjdk.jmh__jmh-core__version>1.37</m:dependency.management__org.openjdk.jmh__jmh-core__version>
+		<m:dependency.management__org.openjdk.jmh__jmh-generator-annprocess__version>1.37</m:dependency.management__org.openjdk.jmh__jmh-generator-annprocess__version>
+		<m:dependency.management__net.java.dev.jna__jna__version>5.17.0</m:dependency.management__net.java.dev.jna__jna__version>
+		<m:dependency.management__org.jspecify__jspecify__version>1.0.0</m:dependency.management__org.jspecify__jspecify__version>
+		<m:dependency.management__junit__junit__version>4.13.2</m:dependency.management__junit__junit__version>
+		<m:dependency.management__org.junit-pioneer__junit-pioneer__version>1.9.1</m:dependency.management__org.junit-pioneer__junit-pioneer__version>
+		<m:dependency.management__org.apache.kafka__kafka-clients__version>3.9.1</m:dependency.management__org.apache.kafka__kafka-clients__version>
+		<m:dependency.management__org.lightcouch__lightcouch__version>0.2.0</m:dependency.management__org.lightcouch__lightcouch__version>
+		<m:dependency.management__log4j__log4j__version>1.2.17</m:dependency.management__log4j__log4j__version>
+		<m:dependency.management__co.elastic.logging__log4j2-ecs-layout__version>1.7.0</m:dependency.management__co.elastic.logging__log4j2-ecs-layout__version>
+		<m:dependency.management__ch.qos.logback__logback-classic__version>1.3.15</m:dependency.management__ch.qos.logback__logback-classic__version>
+		<m:dependency.management__ch.qos.logback__logback-core__version>1.3.15</m:dependency.management__ch.qos.logback__logback-core__version>
+		<m:dependency.management__org.apache.maven__maven-core__version>3.9.10</m:dependency.management__org.apache.maven__maven-core__version>
+		<m:dependency.management__org.apache.maven__maven-model__version>3.9.10</m:dependency.management__org.apache.maven__maven-model__version>
+		<m:dependency.management__org.openjdk.nashorn__nashorn-core__version>15.6</m:dependency.management__org.openjdk.nashorn__nashorn-core__version>
+		<m:dependency.management__org.apache.felix__org.apache.felix.framework__version>7.0.5</m:dependency.management__org.apache.felix__org.apache.felix.framework__version>
+		<m:dependency.management__org.eclipse.platform__org.eclipse.osgi__version>3.23.100</m:dependency.management__org.eclipse.platform__org.eclipse.osgi__version>
+		<m:dependency.management__org.eclipse.persistence__org.eclipse.persistence.jpa__version>2.7.16</m:dependency.management__org.eclipse.persistence__org.eclipse.persistence.jpa__version>
+		<m:dependency.management__org.eclipse.persistence__org.eclipse.persistence.jpa__exclusion_0>org.eclipse.persistence__jakarta.persistence</m:dependency.management__org.eclipse.persistence__org.eclipse.persistence.jpa__exclusion_0>
+		<m:dependency.management__org.osgi__org.osgi.core__version>6.0.0</m:dependency.management__org.osgi__org.osgi.core__version>
+		<m:dependency.management__oro__oro__version>2.0.8</m:dependency.management__oro__oro__version>
+		<m:dependency.management__org.ops4j.pax.exam__pax-exam__version>4.14.0</m:dependency.management__org.ops4j.pax.exam__pax-exam__version>
+		<m:dependency.management__org.ops4j.pax.exam__pax-exam-container-native__version>4.14.0</m:dependency.management__org.ops4j.pax.exam__pax-exam-container-native__version>
+		<m:dependency.management__org.ops4j.pax.exam__pax-exam-junit4__version>4.14.0</m:dependency.management__org.ops4j.pax.exam__pax-exam-junit4__version>
+		<m:dependency.management__org.ops4j.pax.exam__pax-exam-link-assembly__version>4.14.0</m:dependency.management__org.ops4j.pax.exam__pax-exam-link-assembly__version>
+		<m:dependency.management__org.ops4j.pax.exam__pax-exam-spi__version>4.14.0</m:dependency.management__org.ops4j.pax.exam__pax-exam-spi__version>
+		<m:dependency.management__org.codehaus.plexus__plexus-utils__version>3.6.0</m:dependency.management__org.codehaus.plexus__plexus-utils__version>
+		<m:dependency.management__org.springframework.boot__spring-boot__version>2.7.18</m:dependency.management__org.springframework.boot__spring-boot__version>
+		<m:dependency.management__org.springframework.boot__spring-boot-autoconfigure__version>2.7.18</m:dependency.management__org.springframework.boot__spring-boot-autoconfigure__version>
+		<m:dependency.management__org.springframework.boot__spring-boot-starter-log4j2__version>2.7.18</m:dependency.management__org.springframework.boot__spring-boot-starter-log4j2__version>
+		<m:dependency.management__org.springframework.boot__spring-boot-starter-test__version>2.7.18</m:dependency.management__org.springframework.boot__spring-boot-starter-test__version>
+		<m:dependency.management__org.springframework.boot__spring-boot-starter-test__exclusion_0>org.springframework.boot__spring-boot-starter-logging</m:dependency.management__org.springframework.boot__spring-boot-starter-test__exclusion_0>
+		<m:dependency.management__org.springframework__spring-core__exclusion_0>org.springframework__spring-jcl</m:dependency.management__org.springframework__spring-core__exclusion_0>
+		<m:dependency.management__uk.org.webcompere__system-stubs-core__version>2.0.3</m:dependency.management__uk.org.webcompere__system-stubs-core__version>
+		<m:dependency.management__uk.org.webcompere__system-stubs-jupiter__version>2.0.3</m:dependency.management__uk.org.webcompere__system-stubs-jupiter__version>
+		<m:dependency.management__org.apache.velocity__velocity__version>1.7</m:dependency.management__org.apache.velocity__velocity__version>
+		<m:dependency.management__com.github.tomakehurst__wiremock-jre8__version>2.35.2</m:dependency.management__com.github.tomakehurst__wiremock-jre8__version>
+		<m:dependency.management__org.xmlunit__xmlunit-core__version>2.10.3</m:dependency.management__org.xmlunit__xmlunit-core__version>
+		<m:dependency.management__org.xmlunit__xmlunit-matchers__version>2.10.3</m:dependency.management__org.xmlunit__xmlunit-matchers__version>
+		<m:dependency.management__org.tukaani__xz__version>1.10</m:dependency.management__org.tukaani__xz__version>
+		<m:dependency.management__com.github.luben__zstd-jni__version>1.5.7-4</m:dependency.management__com.github.luben__zstd-jni__version>
+		<m:maven.plugins>null__maven-clean-plugin__null|null__maven-enforcer-plugin__null|org.codehaus.gmavenplus__gmavenplus-plugin__null|org.gradlex__gradle-module-metadata-maven-plugin__1.0.1|null__maven-clean-plugin__null|null__maven-enforcer-plugin__null|org.codehaus.gmavenplus__gmavenplus-plugin__null|org.gradlex__gradle-module-metadata-maven-plugin__1.0.1|org.codehaus.mojo__build-helper-maven-plugin__null|null__maven-dependency-plugin__null</m:maven.plugins>
+	</info>
+	<configurations>
+		<conf name="default" visibility="public" description="runtime dependencies and master artifact can be used with this conf" extends="runtime,master"/>
+		<conf name="master" visibility="public" description="contains only the artifact published by this module itself, with no transitive dependencies"/>
+		<conf name="compile" visibility="public" description="this is the default scope, used if none is specified. Compile dependencies are available in all classpaths."/>
+		<conf name="provided" visibility="public" description="this is much like compile, but indicates you expect the JDK or a container to provide it. It is only available on the compilation classpath, and is not transitive."/>
+		<conf name="runtime" visibility="public" description="this scope indicates that the dependency is not required for compilation, but is for execution. It is in the runtime and test classpaths, but not the compile classpath." extends="compile"/>
+		<conf name="test" visibility="public" description="this scope indicates that the dependency is not required for normal use of the application, and is only available for the test compilation and execution phases." extends="runtime"/>
+		<conf name="system" visibility="public" description="this scope is similar to provided except that you have to provide the JAR which contains it explicitly. The artifact is always available and is not looked up in a repository."/>
+		<conf name="sources" visibility="public" description="this configuration contains the source artifact of this module, if any."/>
+		<conf name="javadoc" visibility="public" description="this configuration contains the javadoc artifact of this module, if any."/>
+		<conf name="optional" visibility="public" description="contains all optional dependencies"/>
+	</configurations>
+	<publications>
+		<artifact name="log4j-api" type="jar" ext="jar" conf="master"/>
+	</publications>
+	<dependencies>
+		<dependency org="org.jspecify" name="jspecify" rev="1.0.0" force="true" conf="provided->compile(*),provided(*),runtime(*),master(*)"/>
+		<dependency org="org.osgi" name="org.osgi.core" rev="6.0.0" force="true" conf="provided->compile(*),provided(*),runtime(*),master(*)"/>
+		<dependency org="biz.aQute.bnd" name="biz.aQute.bnd.annotation" rev="7.1.0" force="true" conf="provided->compile(*),provided(*),runtime(*),master(*)"/>
+		<dependency org="com.google.errorprone" name="error_prone_annotations" rev="2.38.0" force="true" conf="provided->compile(*),provided(*),runtime(*),master(*)"/>
+		<dependency org="org.osgi" name="org.osgi.annotation.bundle" rev="2.0.0" force="true" conf="provided->compile(*),provided(*),runtime(*),master(*)"/>
+		<dependency org="org.osgi" name="org.osgi.annotation.versioning" rev="1.1.2" force="true" conf="provided->compile(*),provided(*),runtime(*),master(*)"/>
+		<override org="org.apache.logging.log4j" module="log4j-1.2-api" matcher="exact" rev="2.25.3"/>
+		<override org="org.apache.logging.log4j" module="log4j-api" matcher="exact" rev="2.25.3"/>
+		<override org="org.apache.logging.log4j" module="log4j-api-test" matcher="exact" rev="2.25.3"/>
+		<override org="org.apache.logging.log4j" module="log4j-appserver" matcher="exact" rev="2.25.3"/>
+		<override org="org.apache.logging.log4j" module="log4j-cassandra" matcher="exact" rev="2.25.3"/>
+		<override org="org.apache.logging.log4j" module="log4j-core" matcher="exact" rev="2.25.3"/>
+		<override org="org.apache.logging.log4j" module="log4j-core-test" matcher="exact" rev="2.25.3"/>
+		<override org="org.apache.logging.log4j" module="log4j-couchdb" matcher="exact" rev="2.25.3"/>
+		<override org="org.apache.logging.log4j" module="log4j-docker" matcher="exact" rev="2.25.3"/>
+		<override org="org.apache.logging.log4j" module="log4j-flume-ng" matcher="exact" rev="2.23.1"/>
+		<override org="org.apache.logging.log4j" module="log4j-iostreams" matcher="exact" rev="2.25.3"/>
+		<override org="org.apache.logging.log4j" module="log4j-jakarta-jms" matcher="exact" rev="2.25.3"/>
+		<override org="org.apache.logging.log4j" module="log4j-jakarta-smtp" matcher="exact" rev="2.25.3"/>
+		<override org="org.apache.logging.log4j" module="log4j-jakarta-web" matcher="exact" rev="2.25.3"/>
+		<override org="org.apache.logging.log4j" module="log4j-jcl" matcher="exact" rev="2.25.3"/>
+		<override org="org.apache.logging.log4j" module="log4j-jpa" matcher="exact" rev="2.25.3"/>
+		<override org="org.apache.logging.log4j" module="log4j-jpl" matcher="exact" rev="2.25.3"/>
+		<override org="org.apache.logging.log4j" module="log4j-jul" matcher="exact" rev="2.25.3"/>
+		<override org="org.apache.logging.log4j" module="log4j-layout-template-json" matcher="exact" rev="2.25.3"/>
+		<override org="org.apache.logging.log4j" module="log4j-mongodb4" matcher="exact" rev="2.25.3"/>
+		<override org="org.apache.logging.log4j" module="log4j-mongodb" matcher="exact" rev="2.25.3"/>
+		<override org="org.apache.logging.log4j" module="log4j-slf4j2-impl" matcher="exact" rev="2.25.3"/>
+		<override org="org.apache.logging.log4j" module="log4j-slf4j-impl" matcher="exact" rev="2.25.3"/>
+		<override org="org.apache.logging.log4j" module="log4j-spring-boot" matcher="exact" rev="2.25.3"/>
+		<override org="org.apache.logging.log4j" module="log4j-spring-cloud-config-client" matcher="exact" rev="2.25.3"/>
+		<override org="org.apache.logging.log4j" module="log4j-taglib" matcher="exact" rev="2.25.3"/>
+		<override org="org.apache.logging.log4j" module="log4j-to-jul" matcher="exact" rev="2.25.3"/>
+		<override org="org.apache.logging.log4j" module="log4j-to-slf4j" matcher="exact" rev="2.25.3"/>
+		<override org="org.apache.logging.log4j" module="log4j-web" matcher="exact" rev="2.25.3"/>
+		<override org="org.apache.logging.log4j" module="log4j-fuzz-test" matcher="exact" rev="2.25.3"/>
+		<override org="org.apache.logging.log4j" module="log4j-layout-template-json-test" matcher="exact" rev="2.25.3"/>
+		<override org="org.apache.groovy" module="groovy" matcher="exact" rev="4.0.27"/>
+		<override org="org.apache.groovy" module="groovy-ant" matcher="exact" rev="4.0.27"/>
+		<override org="org.apache.groovy" module="groovy-astbuilder" matcher="exact" rev="4.0.27"/>
+		<override org="org.apache.groovy" module="groovy-cli-commons" matcher="exact" rev="4.0.27"/>
+		<override org="org.apache.groovy" module="groovy-cli-picocli" matcher="exact" rev="4.0.27"/>
+		<override org="org.apache.groovy" module="groovy-console" matcher="exact" rev="4.0.27"/>
+		<override org="org.apache.groovy" module="groovy-contracts" matcher="exact" rev="4.0.27"/>
+		<override org="org.apache.groovy" module="groovy-datetime" matcher="exact" rev="4.0.27"/>
+		<override org="org.apache.groovy" module="groovy-dateutil" matcher="exact" rev="4.0.27"/>
+		<override org="org.apache.groovy" module="groovy-docgenerator" matcher="exact" rev="4.0.27"/>
+		<override org="org.apache.groovy" module="groovy-ginq" matcher="exact" rev="4.0.27"/>
+		<override org="org.apache.groovy" module="groovy-groovydoc" matcher="exact" rev="4.0.27"/>
+		<override org="org.apache.groovy" module="groovy-groovysh" matcher="exact" rev="4.0.27"/>
+		<override org="org.apache.groovy" module="groovy-jmx" matcher="exact" rev="4.0.27"/>
+		<override org="org.apache.groovy" module="groovy-json" matcher="exact" rev="4.0.27"/>
+		<override org="org.apache.groovy" module="groovy-jsr223" matcher="exact" rev="4.0.27"/>
+		<override org="org.apache.groovy" module="groovy-macro" matcher="exact" rev="4.0.27"/>
+		<override org="org.apache.groovy" module="groovy-macro-library" matcher="exact" rev="4.0.27"/>
+		<override org="org.apache.groovy" module="groovy-nio" matcher="exact" rev="4.0.27"/>
+		<override org="org.apache.groovy" module="groovy-servlet" matcher="exact" rev="4.0.27"/>
+		<override org="org.apache.groovy" module="groovy-sql" matcher="exact" rev="4.0.27"/>
+		<override org="org.apache.groovy" module="groovy-swing" matcher="exact" rev="4.0.27"/>
+		<override org="org.apache.groovy" module="groovy-templates" matcher="exact" rev="4.0.27"/>
+		<override org="org.apache.groovy" module="groovy-test" matcher="exact" rev="4.0.27"/>
+		<override org="org.apache.groovy" module="groovy-test-junit5" matcher="exact" rev="4.0.27"/>
+		<override org="org.apache.groovy" module="groovy-testng" matcher="exact" rev="4.0.27"/>
+		<override org="org.apache.groovy" module="groovy-toml" matcher="exact" rev="4.0.27"/>
+		<override org="org.apache.groovy" module="groovy-typecheckers" matcher="exact" rev="4.0.27"/>
+		<override org="org.apache.groovy" module="groovy-xml" matcher="exact" rev="4.0.27"/>
+		<override org="org.apache.groovy" module="groovy-yaml" matcher="exact" rev="4.0.27"/>
+		<override org="com.fasterxml.jackson.core" module="jackson-annotations" matcher="exact" rev="2.19.1"/>
+		<override org="com.fasterxml.jackson.core" module="jackson-core" matcher="exact" rev="2.19.1"/>
+		<override org="com.fasterxml.jackson.core" module="jackson-databind" matcher="exact" rev="2.19.1"/>
+		<override org="com.fasterxml.jackson.dataformat" module="jackson-dataformat-avro" matcher="exact" rev="2.19.1"/>
+		<override org="com.fasterxml.jackson.dataformat" module="jackson-dataformat-cbor" matcher="exact" rev="2.19.1"/>
+		<override org="com.fasterxml.jackson.dataformat" module="jackson-dataformat-csv" matcher="exact" rev="2.19.1"/>
+		<override org="com.fasterxml.jackson.dataformat" module="jackson-dataformat-ion" matcher="exact" rev="2.19.1"/>
+		<override org="com.fasterxml.jackson.dataformat" module="jackson-dataformat-properties" matcher="exact" rev="2.19.1"/>
+		<override org="com.fasterxml.jackson.dataformat" module="jackson-dataformat-protobuf" matcher="exact" rev="2.19.1"/>
+		<override org="com.fasterxml.jackson.dataformat" module="jackson-dataformat-smile" matcher="exact" rev="2.19.1"/>
+		<override org="com.fasterxml.jackson.dataformat" module="jackson-dataformat-toml" matcher="exact" rev="2.19.1"/>
+		<override org="com.fasterxml.jackson.dataformat" module="jackson-dataformat-xml" matcher="exact" rev="2.19.1"/>
+		<override org="com.fasterxml.jackson.dataformat" module="jackson-dataformat-yaml" matcher="exact" rev="2.19.1"/>
+		<override org="com.fasterxml.jackson.datatype" module="jackson-datatype-eclipse-collections" matcher="exact" rev="2.19.1"/>
+		<override org="com.fasterxml.jackson.datatype" module="jackson-datatype-guava" matcher="exact" rev="2.19.1"/>
+		<override org="com.fasterxml.jackson.datatype" module="jackson-datatype-hibernate4" matcher="exact" rev="2.19.1"/>
+		<override org="com.fasterxml.jackson.datatype" module="jackson-datatype-hibernate5" matcher="exact" rev="2.19.1"/>
+		<override org="com.fasterxml.jackson.datatype" module="jackson-datatype-hibernate5-jakarta" matcher="exact" rev="2.19.1"/>
+		<override org="com.fasterxml.jackson.datatype" module="jackson-datatype-hibernate6" matcher="exact" rev="2.19.1"/>
+		<override org="com.fasterxml.jackson.datatype" module="jackson-datatype-hppc" matcher="exact" rev="2.19.1"/>
+		<override org="com.fasterxml.jackson.datatype" module="jackson-datatype-jakarta-jsonp" matcher="exact" rev="2.19.1"/>
+		<override org="com.fasterxml.jackson.datatype" module="jackson-datatype-jaxrs" matcher="exact" rev="2.19.1"/>
+		<override org="com.fasterxml.jackson.datatype" module="jackson-datatype-javax-money" matcher="exact" rev="2.19.1"/>
+		<override org="com.fasterxml.jackson.datatype" module="jackson-datatype-jdk8" matcher="exact" rev="2.19.1"/>
+		<override org="com.fasterxml.jackson.datatype" module="jackson-datatype-joda" matcher="exact" rev="2.19.1"/>
+		<override org="com.fasterxml.jackson.datatype" module="jackson-datatype-joda-money" matcher="exact" rev="2.19.1"/>
+		<override org="com.fasterxml.jackson.datatype" module="jackson-datatype-json-org" matcher="exact" rev="2.19.1"/>
+		<override org="com.fasterxml.jackson.datatype" module="jackson-datatype-jsr310" matcher="exact" rev="2.19.1"/>
+		<override org="com.fasterxml.jackson.datatype" module="jackson-datatype-jsr353" matcher="exact" rev="2.19.1"/>
+		<override org="com.fasterxml.jackson.datatype" module="jackson-datatype-moneta" matcher="exact" rev="2.19.1"/>
+		<override org="com.fasterxml.jackson.datatype" module="jackson-datatype-pcollections" matcher="exact" rev="2.19.1"/>
+		<override org="com.fasterxml.jackson.jaxrs" module="jackson-jaxrs-base" matcher="exact" rev="2.19.1"/>
+		<override org="com.fasterxml.jackson.jaxrs" module="jackson-jaxrs-cbor-provider" matcher="exact" rev="2.19.1"/>
+		<override org="com.fasterxml.jackson.jaxrs" module="jackson-jaxrs-json-provider" matcher="exact" rev="2.19.1"/>
+		<override org="com.fasterxml.jackson.jaxrs" module="jackson-jaxrs-smile-provider" matcher="exact" rev="2.19.1"/>
+		<override org="com.fasterxml.jackson.jaxrs" module="jackson-jaxrs-xml-provider" matcher="exact" rev="2.19.1"/>
+		<override org="com.fasterxml.jackson.jaxrs" module="jackson-jaxrs-yaml-provider" matcher="exact" rev="2.19.1"/>
+		<override org="com.fasterxml.jackson.jakarta.rs" module="jackson-jakarta-rs-base" matcher="exact" rev="2.19.1"/>
+		<override org="com.fasterxml.jackson.jakarta.rs" module="jackson-jakarta-rs-cbor-provider" matcher="exact" rev="2.19.1"/>
+		<override org="com.fasterxml.jackson.jakarta.rs" module="jackson-jakarta-rs-json-provider" matcher="exact" rev="2.19.1"/>
+		<override org="com.fasterxml.jackson.jakarta.rs" module="jackson-jakarta-rs-smile-provider" matcher="exact" rev="2.19.1"/>
+		<override org="com.fasterxml.jackson.jakarta.rs" module="jackson-jakarta-rs-xml-provider" matcher="exact" rev="2.19.1"/>
+		<override org="com.fasterxml.jackson.jakarta.rs" module="jackson-jakarta-rs-yaml-provider" matcher="exact" rev="2.19.1"/>
+		<override org="com.fasterxml.jackson.jr" module="jackson-jr-all" matcher="exact" rev="2.19.1"/>
+		<override org="com.fasterxml.jackson.jr" module="jackson-jr-annotation-support" matcher="exact" rev="2.19.1"/>
+		<override org="com.fasterxml.jackson.jr" module="jackson-jr-extension-javatime" matcher="exact" rev="2.19.1"/>
+		<override org="com.fasterxml.jackson.jr" module="jackson-jr-objects" matcher="exact" rev="2.19.1"/>
+		<override org="com.fasterxml.jackson.jr" module="jackson-jr-retrofit2" matcher="exact" rev="2.19.1"/>
+		<override org="com.fasterxml.jackson.jr" module="jackson-jr-stree" matcher="exact" rev="2.19.1"/>
+		<override org="com.fasterxml.jackson.module" module="jackson-module-afterburner" matcher="exact" rev="2.19.1"/>
+		<override org="com.fasterxml.jackson.module" module="jackson-module-android-record" matcher="exact" rev="2.19.1"/>
+		<override org="com.fasterxml.jackson.module" module="jackson-module-blackbird" matcher="exact" rev="2.19.1"/>
+		<override org="com.fasterxml.jackson.module" module="jackson-module-guice" matcher="exact" rev="2.19.1"/>
+		<override org="com.fasterxml.jackson.module" module="jackson-module-guice7" matcher="exact" rev="2.19.1"/>
+		<override org="com.fasterxml.jackson.module" module="jackson-module-jaxb-annotations" matcher="exact" rev="2.19.1"/>
+		<override org="com.fasterxml.jackson.module" module="jackson-module-jakarta-xmlbind-annotations" matcher="exact" rev="2.19.1"/>
+		<override org="com.fasterxml.jackson.module" module="jackson-module-jsonSchema" matcher="exact" rev="2.19.1"/>
+		<override org="com.fasterxml.jackson.module" module="jackson-module-jsonSchema-jakarta" matcher="exact" rev="2.19.1"/>
+		<override org="com.fasterxml.jackson.module" module="jackson-module-kotlin" matcher="exact" rev="2.19.1"/>
+		<override org="com.fasterxml.jackson.module" module="jackson-module-mrbean" matcher="exact" rev="2.19.1"/>
+		<override org="com.fasterxml.jackson.module" module="jackson-module-no-ctor-deser" matcher="exact" rev="2.19.1"/>
+		<override org="com.fasterxml.jackson.module" module="jackson-module-osgi" matcher="exact" rev="2.19.1"/>
+		<override org="com.fasterxml.jackson.module" module="jackson-module-parameter-names" matcher="exact" rev="2.19.1"/>
+		<override org="com.fasterxml.jackson.module" module="jackson-module-paranamer" matcher="exact" rev="2.19.1"/>
+		<override org="com.fasterxml.jackson.module" module="jackson-module-scala_2.11" matcher="exact" rev="2.19.1"/>
+		<override org="com.fasterxml.jackson.module" module="jackson-module-scala_2.12" matcher="exact" rev="2.19.1"/>
+		<override org="com.fasterxml.jackson.module" module="jackson-module-scala_2.13" matcher="exact" rev="2.19.1"/>
+		<override org="com.fasterxml.jackson.module" module="jackson-module-scala_3" matcher="exact" rev="2.19.1"/>
+		<override org="jakarta.servlet" module="jakarta.servlet-api" matcher="exact" rev="5.0.0"/>
+		<override org="jakarta.servlet.jsp" module="jakarta.servlet.jsp-api" matcher="exact" rev="3.0.0"/>
+		<override org="jakarta.el" module="jakarta.el-api" matcher="exact" rev="4.0.0"/>
+		<override org="jakarta.servlet.jsp.jstl" module="jakarta.servlet.jsp.jstl-api" matcher="exact" rev="2.0.0"/>
+		<override org="jakarta.faces" module="jakarta.faces-api" matcher="exact" rev="3.0.0"/>
+		<override org="jakarta.ws.rs" module="jakarta.ws.rs-api" matcher="exact" rev="3.0.0"/>
+		<override org="jakarta.websocket" module="jakarta.websocket-api" matcher="exact" rev="2.0.0"/>
+		<override org="jakarta.json" module="jakarta.json-api" matcher="exact" rev="2.0.1"/>
+		<override org="jakarta.json.bind" module="jakarta.json.bind-api" matcher="exact" rev="2.0.0"/>
+		<override org="jakarta.annotation" module="jakarta.annotation-api" matcher="exact" rev="2.0.0"/>
+		<override org="jakarta.ejb" module="jakarta.ejb-api" matcher="exact" rev="4.0.0"/>
+		<override org="jakarta.transaction" module="jakarta.transaction-api" matcher="exact" rev="2.0.0"/>
+		<override org="jakarta.persistence" module="jakarta.persistence-api" matcher="exact" rev="3.0.0"/>
+		<override org="jakarta.validation" module="jakarta.validation-api" matcher="exact" rev="3.0.0"/>
+		<override org="jakarta.interceptor" module="jakarta.interceptor-api" matcher="exact" rev="2.0.0"/>
+		<override org="jakarta.enterprise" module="jakarta.enterprise.cdi-api" matcher="exact" rev="3.0.0"/>
+		<override org="jakarta.inject" module="jakarta.inject-api" matcher="exact" rev="2.0.0"/>
+		<override org="jakarta.authentication" module="jakarta.authentication-api" matcher="exact" rev="2.0.0"/>
+		<override org="jakarta.security.enterprise" module="jakarta.security.enterprise-api" matcher="exact" rev="2.0.0"/>
+		<override org="jakarta.jms" module="jakarta.jms-api" matcher="exact" rev="3.0.0"/>
+		<override org="jakarta.activation" module="jakarta.activation-api" matcher="exact" rev="2.1.3"/>
+		<override org="jakarta.mail" module="jakarta.mail-api" matcher="exact" rev="2.1.3"/>
+		<override org="com.sun.mail" module="jakarta.mail" matcher="exact" rev="2.0.1"/>
+		<override org="jakarta.resource" module="jakarta.resource-api" matcher="exact" rev="2.0.0"/>
+		<override org="jakarta.authorization" module="jakarta.authorization-api" matcher="exact" rev="2.0.0"/>
+		<override org="jakarta.enterprise.concurrent" module="jakarta.enterprise.concurrent-api" matcher="exact" rev="2.0.0"/>
+		<override org="jakarta.batch" module="jakarta.batch-api" matcher="exact" rev="2.0.0"/>
+		<override org="jakarta.xml.bind" module="jakarta.xml.bind-api" matcher="exact" rev="3.0.1"/>
+		<override org="jakarta.xml.ws" module="jakarta.xml.ws-api" matcher="exact" rev="3.0.1"/>
+		<override org="jakarta.jws" module="jakarta.jws-api" matcher="exact" rev="3.0.0"/>
+		<override org="jakarta.xml.soap" module="jakarta.xml.soap-api" matcher="exact" rev="2.0.1"/>
+		<override org="org.junit.jupiter" module="junit-jupiter" matcher="exact" rev="5.13.2"/>
+		<override org="org.junit.jupiter" module="junit-jupiter-api" matcher="exact" rev="5.13.2"/>
+		<override org="org.junit.jupiter" module="junit-jupiter-engine" matcher="exact" rev="5.13.2"/>
+		<override org="org.junit.jupiter" module="junit-jupiter-migrationsupport" matcher="exact" rev="5.13.2"/>
+		<override org="org.junit.jupiter" module="junit-jupiter-params" matcher="exact" rev="5.13.2"/>
+		<override org="org.junit.platform" module="junit-platform-commons" matcher="exact" rev="1.13.2"/>
+		<override org="org.junit.platform" module="junit-platform-console" matcher="exact" rev="1.13.2"/>
+		<override org="org.junit.platform" module="junit-platform-engine" matcher="exact" rev="1.13.2"/>
+		<override org="org.junit.platform" module="junit-platform-jfr" matcher="exact" rev="1.13.2"/>
+		<override org="org.junit.platform" module="junit-platform-launcher" matcher="exact" rev="1.13.2"/>
+		<override org="org.junit.platform" module="junit-platform-reporting" matcher="exact" rev="1.13.2"/>
+		<override org="org.junit.platform" module="junit-platform-runner" matcher="exact" rev="1.13.2"/>
+		<override org="org.junit.platform" module="junit-platform-suite" matcher="exact" rev="1.13.2"/>
+		<override org="org.junit.platform" module="junit-platform-suite-api" matcher="exact" rev="1.13.2"/>
+		<override org="org.junit.platform" module="junit-platform-suite-commons" matcher="exact" rev="1.13.2"/>
+		<override org="org.junit.platform" module="junit-platform-suite-engine" matcher="exact" rev="1.13.2"/>
+		<override org="org.junit.platform" module="junit-platform-testkit" matcher="exact" rev="1.13.2"/>
+		<override org="org.junit.vintage" module="junit-vintage-engine" matcher="exact" rev="5.13.2"/>
+		<override org="org.mockito" module="mockito-core" matcher="exact" rev="4.11.0"/>
+		<override org="org.mockito" module="mockito-android" matcher="exact" rev="4.11.0"/>
+		<override org="org.mockito" module="mockito-errorprone" matcher="exact" rev="4.11.0"/>
+		<override org="org.mockito" module="mockito-inline" matcher="exact" rev="4.11.0"/>
+		<override org="org.mockito" module="mockito-junit-jupiter" matcher="exact" rev="4.11.0"/>
+		<override org="org.mockito" module="mockito-proxy" matcher="exact" rev="4.11.0"/>
+		<override org="org.mockito" module="mockito-subclass" matcher="exact" rev="4.11.0"/>
+		<override org="org.springframework" module="spring-aop" matcher="exact" rev="5.3.39"/>
+		<override org="org.springframework" module="spring-aspects" matcher="exact" rev="5.3.39"/>
+		<override org="org.springframework" module="spring-beans" matcher="exact" rev="5.3.39"/>
+		<override org="org.springframework" module="spring-context" matcher="exact" rev="5.3.39"/>
+		<override org="org.springframework" module="spring-context-indexer" matcher="exact" rev="5.3.39"/>
+		<override org="org.springframework" module="spring-context-support" matcher="exact" rev="5.3.39"/>
+		<override org="org.springframework" module="spring-core" matcher="exact" rev="5.3.39"/>
+		<override org="org.springframework" module="spring-expression" matcher="exact" rev="5.3.39"/>
+		<override org="org.springframework" module="spring-instrument" matcher="exact" rev="5.3.39"/>
+		<override org="org.springframework" module="spring-jcl" matcher="exact" rev="5.3.39"/>
+		<override org="org.springframework" module="spring-jdbc" matcher="exact" rev="5.3.39"/>
+		<override org="org.springframework" module="spring-jms" matcher="exact" rev="5.3.39"/>
+		<override org="org.springframework" module="spring-messaging" matcher="exact" rev="5.3.39"/>
+		<override org="org.springframework" module="spring-orm" matcher="exact" rev="5.3.39"/>
+		<override org="org.springframework" module="spring-oxm" matcher="exact" rev="5.3.39"/>
+		<override org="org.springframework" module="spring-r2dbc" matcher="exact" rev="5.3.39"/>
+		<override org="org.springframework" module="spring-test" matcher="exact" rev="5.3.39"/>
+		<override org="org.springframework" module="spring-tx" matcher="exact" rev="5.3.39"/>
+		<override org="org.springframework" module="spring-web" matcher="exact" rev="5.3.39"/>
+		<override org="org.springframework" module="spring-webflux" matcher="exact" rev="5.3.39"/>
+		<override org="org.springframework" module="spring-webmvc" matcher="exact" rev="5.3.39"/>
+		<override org="org.springframework" module="spring-websocket" matcher="exact" rev="5.3.39"/>
+		<override org="org.apache.logging.log4j" module="log4j-api-java9" matcher="exact" rev="2.25.3"/>
+		<override org="org.apache.logging.log4j" module="log4j-core-java9" matcher="exact" rev="2.25.3"/>
+		<override org="org.apache.logging.log4j" module="log4j-transform-maven-shade-plugin-extensions" matcher="exact" rev="0.2.0"/>
+		<override org="org.apache.activemq" module="activemq-broker" matcher="exact" rev="6.1.7"/>
+		<override org="org.eclipse.angus" module="angus-activation" matcher="exact" rev="2.0.2"/>
+		<override org="org.assertj" module="assertj-core" matcher="exact" rev="3.27.3"/>
+		<override org="org.awaitility" module="awaitility" matcher="exact" rev="4.3.0"/>
+		<override org="com.code-intelligence" module="jazzer" matcher="exact" rev="0.24.0"/>
+		<override org="com.code-intelligence" module="jazzer-api" matcher="exact" rev="0.24.0"/>
+		<override org="org.apache-extras.beanshell" module="bsh" matcher="exact" rev="2.0b6"/>
+		<override org="org.apache.cassandra" module="cassandra-all" matcher="exact" rev="3.11.19"/>
+		<override org="org.apache.cassandra" module="cassandra-all" matcher="exact" rev="3.11.19"/>
+		<override org="org.apache.cassandra" module="cassandra-all" matcher="exact" rev="3.11.19"/>
+		<override org="org.apache.cassandra" module="cassandra-all" matcher="exact" rev="3.11.19"/>
+		<override org="org.apache.cassandra" module="cassandra-all" matcher="exact" rev="3.11.19"/>
+		<override org="com.datastax.cassandra" module="cassandra-driver-core" matcher="exact" rev="3.11.5"/>
+		<override org="org.apache.cassandra" module="cassandra-thrift" matcher="exact" rev="3.11.19"/>
+		<override org="org.apache.cassandra" module="cassandra-thrift" matcher="exact" rev="3.11.19"/>
+		<override org="org.apache.cassandra" module="cassandra-thrift" matcher="exact" rev="3.11.19"/>
+		<override org="commons-codec" module="commons-codec" matcher="exact" rev="1.18.0"/>
+		<override org="org.apache.commons" module="commons-compress" matcher="exact" rev="1.27.1"/>
+		<override org="org.apache.commons" module="commons-csv" matcher="exact" rev="1.14.0"/>
+		<override org="org.apache.commons" module="commons-dbcp2" matcher="exact" rev="2.13.0"/>
+		<override org="commons-io" module="commons-io" matcher="exact" rev="2.19.0"/>
+		<override org="org.apache.commons" module="commons-lang3" matcher="exact" rev="3.17.0"/>
+		<override org="commons-logging" module="commons-logging" matcher="exact" rev="1.3.5"/>
+		<override org="org.apache.commons" module="commons-pool2" matcher="exact" rev="2.12.1"/>
+		<override org="com.conversantmedia" module="disruptor" matcher="exact" rev="1.2.15"/>
+		<override org="com.lmax" module="disruptor" matcher="exact" rev="3.4.4"/>
+		<override org="org.zapodot" module="embedded-ldap-junit" matcher="exact" rev="0.9.0"/>
+		<override org="com.google.guava" module="guava" matcher="exact" rev="33.4.8-jre"/>
+		<override org="com.google.guava" module="guava-testlib" matcher="exact" rev="33.4.8-jre"/>
+		<override org="com.h2database" module="h2" matcher="exact" rev="2.2.224"/>
+		<override org="org.hamcrest" module="hamcrest" matcher="exact" rev="3.0"/>
+		<override org="org.hamcrest" module="hamcrest-core" matcher="exact" rev="3.0"/>
+		<override org="org.hamcrest" module="hamcrest-library" matcher="exact" rev="3.0"/>
+		<override org="org.hdrhistogram" module="HdrHistogram" matcher="exact" rev="2.2.2"/>
+		<override org="org.hsqldb" module="hsqldb" matcher="exact" rev="2.7.4"/>
+		<override org="org.apache.httpcomponents" module="httpclient" matcher="exact" rev="4.5.14"/>
+		<override org="org.apache.httpcomponents" module="httpcore" matcher="exact" rev="4.4.16"/>
+		<override org="org.eclipse.angus" module="jakarta.mail" matcher="exact" rev="2.0.3"/>
+		<override org="com.google.code.java-allocation-instrumenter" module="java-allocation-instrumenter" matcher="exact" rev="3.3.4"/>
+		<override org="javax.activation" module="javax.activation-api" matcher="exact" rev="1.2.0"/>
+		<override org="javax.inject" module="javax.inject" matcher="exact" rev="1"/>
+		<override org="javax.jms" module="javax.jms-api" matcher="exact" rev="2.0.1"/>
+		<override org="com.sun.mail" module="javax.mail" matcher="exact" rev="1.6.2"/>
+		<override org="javax.mail" module="javax.mail-api" matcher="exact" rev="1.6.2"/>
+		<override org="javax.persistence" module="javax.persistence-api" matcher="exact" rev="2.2"/>
+		<override org="javax.servlet.jsp" module="javax.servlet.jsp-api" matcher="exact" rev="2.3.3"/>
+		<override org="javax.servlet" module="javax.servlet-api" matcher="exact" rev="4.0.1"/>
+		<override org="com.sun" module="jconsole" matcher="exact" rev="1.7.0"/>
+		<override org="org.jctools" module="jctools-core" matcher="exact" rev="4.0.5"/>
+		<override org="org.zeromq" module="jeromq" matcher="exact" rev="0.6.0"/>
+		<override org="org.jmdns" module="jmdns" matcher="exact" rev="3.6.1"/>
+		<override org="org.openjdk.jmh" module="jmh-core" matcher="exact" rev="1.37"/>
+		<override org="org.openjdk.jmh" module="jmh-generator-annprocess" matcher="exact" rev="1.37"/>
+		<override org="net.java.dev.jna" module="jna" matcher="exact" rev="5.17.0"/>
+		<override org="org.jspecify" module="jspecify" matcher="exact" rev="1.0.0"/>
+		<override org="junit" module="junit" matcher="exact" rev="4.13.2"/>
+		<override org="org.junit-pioneer" module="junit-pioneer" matcher="exact" rev="1.9.1"/>
+		<override org="org.apache.kafka" module="kafka-clients" matcher="exact" rev="3.9.1"/>
+		<override org="org.lightcouch" module="lightcouch" matcher="exact" rev="0.2.0"/>
+		<override org="log4j" module="log4j" matcher="exact" rev="1.2.17"/>
+		<override org="co.elastic.logging" module="log4j2-ecs-layout" matcher="exact" rev="1.7.0"/>
+		<override org="ch.qos.logback" module="logback-classic" matcher="exact" rev="1.3.15"/>
+		<override org="ch.qos.logback" module="logback-core" matcher="exact" rev="1.3.15"/>
+		<override org="org.apache.maven" module="maven-core" matcher="exact" rev="3.9.10"/>
+		<override org="org.apache.maven" module="maven-model" matcher="exact" rev="3.9.10"/>
+		<override org="org.openjdk.nashorn" module="nashorn-core" matcher="exact" rev="15.6"/>
+		<override org="org.apache.felix" module="org.apache.felix.framework" matcher="exact" rev="7.0.5"/>
+		<override org="org.eclipse.platform" module="org.eclipse.osgi" matcher="exact" rev="3.23.100"/>
+		<override org="org.eclipse.persistence" module="org.eclipse.persistence.jpa" matcher="exact" rev="2.7.16"/>
+		<override org="org.eclipse.persistence" module="org.eclipse.persistence.jpa" matcher="exact" rev="2.7.16"/>
+		<override org="org.osgi" module="org.osgi.core" matcher="exact" rev="6.0.0"/>
+		<override org="oro" module="oro" matcher="exact" rev="2.0.8"/>
+		<override org="org.ops4j.pax.exam" module="pax-exam" matcher="exact" rev="4.14.0"/>
+		<override org="org.ops4j.pax.exam" module="pax-exam-container-native" matcher="exact" rev="4.14.0"/>
+		<override org="org.ops4j.pax.exam" module="pax-exam-junit4" matcher="exact" rev="4.14.0"/>
+		<override org="org.ops4j.pax.exam" module="pax-exam-link-assembly" matcher="exact" rev="4.14.0"/>
+		<override org="org.ops4j.pax.exam" module="pax-exam-spi" matcher="exact" rev="4.14.0"/>
+		<override org="org.codehaus.plexus" module="plexus-utils" matcher="exact" rev="3.6.0"/>
+		<override org="org.springframework.boot" module="spring-boot" matcher="exact" rev="2.7.18"/>
+		<override org="org.springframework.boot" module="spring-boot-autoconfigure" matcher="exact" rev="2.7.18"/>
+		<override org="org.springframework.boot" module="spring-boot-starter-log4j2" matcher="exact" rev="2.7.18"/>
+		<override org="org.springframework.boot" module="spring-boot-starter-test" matcher="exact" rev="2.7.18"/>
+		<override org="org.springframework.boot" module="spring-boot-starter-test" matcher="exact" rev="2.7.18"/>
+		<override org="org.springframework" module="spring-core" matcher="exact" rev="5.3.39"/>
+		<override org="uk.org.webcompere" module="system-stubs-core" matcher="exact" rev="2.0.3"/>
+		<override org="uk.org.webcompere" module="system-stubs-jupiter" matcher="exact" rev="2.0.3"/>
+		<override org="org.apache.velocity" module="velocity" matcher="exact" rev="1.7"/>
+		<override org="com.github.tomakehurst" module="wiremock-jre8" matcher="exact" rev="2.35.2"/>
+		<override org="org.xmlunit" module="xmlunit-core" matcher="exact" rev="2.10.3"/>
+		<override org="org.xmlunit" module="xmlunit-matchers" matcher="exact" rev="2.10.3"/>
+		<override org="org.tukaani" module="xz" matcher="exact" rev="1.10"/>
+		<override org="com.github.luben" module="zstd-jni" matcher="exact" rev="1.5.7-4"/>
+	</dependencies>
+</ivy-module>

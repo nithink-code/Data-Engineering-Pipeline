@@ -2,3 +2,5 @@ pyspark
 delta-spark
 apache-airflow
 pandas
+streamlit
+deltalake
