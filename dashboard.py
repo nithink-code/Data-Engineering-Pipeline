@@ -216,7 +216,10 @@ def _compute_gold_from_raw(input_path: str) -> pd.DataFrame:
     raw_combined.dropna(subset=["timestamp"], inplace=True)
     raw_combined["date"] = raw_combined["timestamp"].dt.date
 
-    # 3. Aggregate (Match Gold Schema + New Order IDs column + Timestamp)
+    # 3. Deduplicate (Crucial: Prevents double-counting in metrics)
+    raw_combined = raw_combined.sort_values("timestamp", ascending=False).drop_duplicates(subset=["order_id"], keep="first")
+
+    # 4. Aggregate (Match Gold Schema + New Order IDs column + Timestamp)
     gold_style = (
         raw_combined.groupby("date")
         .agg(
@@ -444,9 +447,10 @@ def build_validation_frame(bronze_df: pd.DataFrame, silver_df: pd.DataFrame) -> 
     
     # 1. Check for Duplicate IDs (Identify which specific ID is repeated)
     if "order_id" in bronze_df.columns:
+        # We flag all instances of the duplicate so the user can see the conflict
         dup_ids = bronze_df[bronze_df.duplicated(subset=["order_id"], keep=False)].copy()
         if not dup_ids.empty:
-            dup_ids["Reason"] = dup_ids["order_id"].apply(lambda x: f"Conflict: Multiple records found for Order ID {x}")
+            dup_ids["Reason"] = dup_ids["order_id"].apply(lambda x: f"Duplicate Error: Multiple entries found for Order ID {x}")
             checks.append(dup_ids)
 
     # 2. Check for Missing/Incomplete Data
@@ -547,112 +551,103 @@ def render_medallion_section() -> None:
         try: silver_history = load_delta_history(str(silver_path))
         except: pass
 
+    # --- STEP 1: BRONZE ---
     open_flow_card(
         "Step 1: Bronze Layer (Raw Ingested)",
-        "Ingested source records before quality and dedup transformations.",
+        "Untouched source records. This layer captures everything, including mistakes and duplicates.",
         "bronze",
     )
-    # Priority: Real-time IF input exists, otherwise Delta
     display_bronze = rt_bronze if not rt_bronze.empty else pd.DataFrame()
     
-    # Inject "Virtual" pending transaction if raw data exists but Delta hasn't seen it
     if not display_bronze.empty:
+        st.metric("Total Raw Records", f"{len(display_bronze)}")
         pending_row = pd.DataFrame([{
             "version": "Pending",
-            "timestamp": "Real-time (Uncommitted)",
-            "operation": "INGESTION IN-PROGRESS",
-            "operationParameters": f"Scanning {len(display_bronze)} raw records",
+            "timestamp": "Real-time",
+            "operation": "INGESTION",
+            "operationParameters": "Scanning raw CSVs",
             "userName": "System",
             "isBlindAppend": True,
-            "engineInfo": "Hybrid RT Engine"
+            "engineInfo": "Hybrid RT"
         }])
         bronze_history = pd.concat([pending_row, bronze_history], ignore_index=True)
-    
-    if display_bronze.empty:
-        st.warning("Bronze table is currently empty. Add CSV files to `data/input/` to see raw records instantly.")
+        st.dataframe(display_bronze.head(20), use_container_width=True)
     else:
-        st.dataframe(display_bronze.head(15), use_container_width=True)
-        with st.expander("📝 View Active Transaction Details (ACID Log)"):
-            if display_bronze.empty:
-                st.info("No active records to trace.")
-            else:
-                # Filter to only the single latest relevant state
-                if bronze_history.empty:
-                    st.info("No persisted history. Displaying real-time state.")
-                else:
-                    st.write(f"**Current active record count:** {len(display_bronze)}")
-                    st.write("**Latest Modification Details:**")
-                    # Only show the very top record (either Pending or Version N)
-                    st.table(bronze_history.head(1)) 
+        st.warning("Bronze table is empty. Add data to `data/input/`.")
+
+    with st.expander("📝 View Full Bronze Transaction History"):
+        if not bronze_history.empty:
+            st.dataframe(bronze_history, use_container_width=True)
+        else:
+            st.info("No history available.")
     close_flow_card()
 
+    # --- STEP 2: VALIDATION ---
     open_flow_card(
-        "Step 2: Data Quality and Validation",
-        "On-the-fly comparison between Bronze and Silver to show record changes.",
+        "Step 2: Data Quality & Validation",
+        "The logic gate that identifies duplicates and errors before they reach your charts.",
         "validation",
     )
     
     if display_bronze.empty:
-        st.info("Waiting for data in Step 1 to perform validation...")
+        st.info("Waiting for data...")
     else:
-        # For validation, we compare Bronze and the "Clean" Silver version
         validation_df = build_validation_frame(display_bronze, rt_silver)
         
+        col_v1, col_v2 = st.columns(2)
+        with col_v1:
+            st.metric("Issues Found", len(validation_df))
+        with col_v2:
+            duplicates_count = len(validation_df[validation_df["Reason"].str.contains("Duplicate", na=False)])
+            st.metric("Duplicate Records", duplicates_count, delta="Filtered", delta_color="inverse")
+
         if validation_df.empty:
-            st.success("✅ Clean Sweep: No duplicate or null records detected in current snapshot.")
+            st.success("✅ Clean Sweep: No duplicates or errors detected.")
         else:
-            st.markdown(f"Found **{len(validation_df)}** records requiring attention.")
-            st.markdown("*Tip: Select a record to view the full rejection report details.*")
+            st.markdown("### 🛠️ Quality Rejection Log")
+            st.markdown("These records will **not** be counted in your Silver/Gold layers:")
             event = st.dataframe(
-                validation_df.head(30),
+                validation_df,
                 use_container_width=True,
                 on_select="rerun",
                 selection_mode="single-row",
                 hide_index=True
             )
 
-            selected_rows = event.selection.rows
-            if selected_rows:
-                selected_idx = selected_rows[0]
-                row_data = validation_df.iloc[selected_idx]
-                show_rejection_dialog(row_data)
+            if event.selection.rows:
+                show_rejection_dialog(validation_df.iloc[event.selection.rows[0]])
     close_flow_card()
 
+    # --- STEP 3: SILVER ---
     open_flow_card(
         "Step 3: Silver Layer (Cleaned Data)",
-        "Deduplicated and null-handled dataset used for downstream analytics.",
+        "The final source of truth. Duplicates have been removed and data is ready for use.",
         "silver",
     )
     
     display_silver = rt_silver if not rt_silver.empty else pd.DataFrame()
 
     if not display_silver.empty:
+        st.metric("Unique Records", len(display_silver), help="Duplicates are filtered out here.")
         pending_row_silver = pd.DataFrame([{
             "version": "Pending",
-            "timestamp": "Real-time (Uncommitted)",
-            "operation": "DEDUP IN-PROGRESS",
-            "operationParameters": "Applying dedup logic...",
+            "timestamp": "Real-time",
+            "operation": "CLEAN/DEDUP",
+            "operationParameters": "Applying Silver rules",
             "userName": "System",
             "isBlindAppend": True,
-            "engineInfo": "Hybrid RT Engine"
+            "engineInfo": "Hybrid RT"
         }])
         silver_history = pd.concat([pending_row_silver, silver_history], ignore_index=True)
-    
-    if display_silver.empty:
-        st.warning("Silver table is currently empty. Records move here after validation.")
+        st.dataframe(display_silver.head(20), use_container_width=True)
     else:
-        st.dataframe(display_silver.head(15), use_container_width=True)
-        with st.expander("📝 View Active Transaction Details (ACID Log)"):
-            if display_silver.empty:
-                st.info("No active records to trace.")
-            else:
-                st.write(f"**Cleaned record count:** {len(display_silver)}")
-                st.write("**Latest Modification Details:**")
-                if silver_history.empty:
-                    st.info("No persisted history. Displaying real-time state.")
-                else:
-                    # Only show the very top record (either Pending or Version N)
-                    st.table(silver_history.head(1))
+        st.warning("Silver table is empty. Records transition here after validation.")
+
+    with st.expander("📝 View Full Silver Transaction History"):
+        if not silver_history.empty:
+            st.dataframe(silver_history, use_container_width=True)
+        else:
+            st.info("No history available.")
     close_flow_card()
 
 
