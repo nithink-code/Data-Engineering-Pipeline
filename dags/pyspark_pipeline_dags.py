@@ -1,10 +1,12 @@
 import os
+import json
+import glob
 from datetime import timedelta
 
 import pendulum
 from airflow import DAG
 from airflow.operators.python import PythonOperator  # pyright: ignore[reportMissingImports]
-from airflow.sensors.filesystem import FileSensor  # pyright: ignore[reportMissingImports]
+from airflow.operators.python import ShortCircuitOperator  # pyright: ignore[reportMissingImports]
 
 
 def log_pipeline_start(**context) -> None:
@@ -38,7 +40,56 @@ SPARK_JOB_PATH = os.environ.get(
     os.path.join(PROJECT_ROOT, "spark_jobs", "medallion_pipeline.py"),
 )
 INPUT_FILE_GLOB = os.environ.get("INPUT_FILE_GLOB", "/data/input/*")
-FS_CONN_ID = os.environ.get("FS_CONN_ID", "fs_default")
+INPUT_SNAPSHOT_PATH = os.environ.get("INPUT_SNAPSHOT_PATH", "/data/.input_snapshot.json")
+
+
+def _collect_input_snapshot() -> dict:
+    files = []
+    for path in sorted(glob.glob(INPUT_FILE_GLOB)):
+        if not os.path.isfile(path):
+            continue
+        stat_info = os.stat(path)
+        files.append(
+            {
+                "path": path,
+                "size": stat_info.st_size,
+                "mtime_ns": stat_info.st_mtime_ns,
+            }
+        )
+
+    return {
+        "glob": INPUT_FILE_GLOB,
+        "files": files,
+    }
+
+
+def _should_run_for_input_change(**context) -> bool:
+    """Return True only when input files changed since the last event DAG run.
+
+    This keeps automation responsive while avoiding expensive Spark submits when
+    there is no new/updated/deleted file in data/input.
+    """
+    ti_log = context["ti"].log
+    current_snapshot = _collect_input_snapshot()
+
+    previous_snapshot = None
+    if os.path.exists(INPUT_SNAPSHOT_PATH):
+        try:
+            with open(INPUT_SNAPSHOT_PATH, "r", encoding="utf-8") as snapshot_file:
+                previous_snapshot = json.load(snapshot_file)
+        except (OSError, json.JSONDecodeError) as exc:
+            ti_log.warning("Could not read previous snapshot, forcing run | error=%s", exc)
+
+    changed = current_snapshot != previous_snapshot
+    if changed:
+        os.makedirs(os.path.dirname(INPUT_SNAPSHOT_PATH), exist_ok=True)
+        with open(INPUT_SNAPSHOT_PATH, "w", encoding="utf-8") as snapshot_file:
+            json.dump(current_snapshot, snapshot_file, indent=2)
+        ti_log.info("[PIPELINE] Input change detected | files=%s", len(current_snapshot["files"]))
+    else:
+        ti_log.info("[PIPELINE] No input change detected; skipping Spark run")
+
+    return changed
 
 def _run_spark_job(**context) -> None:
     """Execute spark-submit on the running spark container via the Docker SDK.
@@ -127,20 +178,16 @@ with DAG(
 
 with DAG(
     dag_id="event_driven_pyspark_pipeline",
-    description="Monitors data/input and runs PySpark pipeline when a new file appears",
+    description="Runs PySpark pipeline only when data/input changes",
     start_date=pendulum.datetime(2026, 1, 1, tz="UTC"),
-    schedule="*/5 * * * *",
+    schedule="* * * * *",
     catchup=False,
     default_args=DEFAULT_ARGS,
-    tags=["spark", "delta", "event-driven", "sensor"],
+    tags=["spark", "delta", "event-driven", "change-detection"],
 ) as event_dag:
-    detect_new_input_file = FileSensor(
-        task_id="detect_new_input_file",
-        fs_conn_id=FS_CONN_ID,
-        filepath=INPUT_FILE_GLOB,
-        poke_interval=30,
-        timeout=60 * 60,
-        mode="reschedule",
+    detect_input_change = ShortCircuitOperator(
+        task_id="detect_input_change",
+        python_callable=_should_run_for_input_change,
     )
 
     event_start_log = PythonOperator(
@@ -160,4 +207,4 @@ with DAG(
         trigger_rule="all_done",
     )
 
-    detect_new_input_file >> event_start_log >> event_run_spark >> event_finish_log
+    detect_input_change >> event_start_log >> event_run_spark >> event_finish_log

@@ -11,7 +11,10 @@
       - ./spark_jobs:/spark_jobs
 
   airflow:
-    image: apache/airflow:2.8.1
+    build:
+      context: .
+      dockerfile: airflow/Dockerfile
+    image: data-pipeline-airflow:2.8.1-custom
     container_name: airflow
     depends_on:
       - spark
@@ -20,13 +23,13 @@
       - AIRFLOW_HOME=/opt/airflow
       - AIRFLOW__CORE__LOAD_EXAMPLES=False
       - AIRFLOW__CORE__EXECUTOR=SequentialExecutor
+      - AIRFLOW__WEBSERVER__SECRET_KEY=dev-local-airflow-secret-key
       - AIRFLOW__DATABASE__SQL_ALCHEMY_CONN=sqlite:////opt/airflow/airflow.db
       - _AIRFLOW_WWW_USER_CREATE=true
       - _AIRFLOW_WWW_USER_USERNAME=admin
       - _AIRFLOW_WWW_USER_PASSWORD=admin
       - PROJECT_ROOT=/opt/airflow
       - SPARK_JOB_PATH=/spark_jobs/medallion_pipeline.py
-      - _PIP_ADDITIONAL_REQUIREMENTS=docker
     volumes:
       - airflow-db:/opt/airflow
       - ./dags:/opt/airflow/dags

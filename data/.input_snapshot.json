@@ -1,0 +1,25 @@
+{
+  "glob": "/data/input/*",
+  "files": [
+    {
+      "path": "/data/input/od1.csv",
+      "size": 2170,
+      "mtime_ns": 1773408868826362100
+    },
+    {
+      "path": "/data/input/orders_batch1.csv",
+      "size": 388,
+      "mtime_ns": 1773399837409858800
+    },
+    {
+      "path": "/data/input/orders_batch2.csv",
+      "size": 398,
+      "mtime_ns": 1773406273752035600
+    },
+    {
+      "path": "/data/input/orders_batch3.csv",
+      "size": 398,
+      "mtime_ns": 1773407581295441400
+    }
+  ]
+}

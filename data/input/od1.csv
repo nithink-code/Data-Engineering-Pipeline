@@ -1,0 +1,41 @@
+order_id,product,category,quantity,price,customer_city,order_date
+1001,Laptop,Electronics,1,65000,Chennai,2024-01-02
+1002,Headphones,Electronics,2,2500,Bangalore,2024-01-03
+1003,Shoes,Fashion,1,3200,Hyderabad,2024-01-03
+1004,T-Shirt,Fashion,3,900,Mumbai,2024-01-04
+1005,Smartphone,Electronics,1,22000,Delhi,2024-01-04
+1006,Refrigerator,Home Appliances,1,30000,Pune,2024-01-05
+1007,Microwave,Home Appliances,1,8500,Kolkata,2024-01-05
+1008,Watch,Accessories,2,4500,Chennai,2024-01-06
+1009,Backpack,Accessories,1,1800,Bangalore,2024-01-06
+1010,Tablet,Electronics,1,18000,Hyderabad,2024-01-07
+1011,Keyboard,Electronics,2,1200,Mumbai,2024-01-07
+1012,Mouse,Electronics,3,700,Delhi,2024-01-08
+1013,Jeans,Fashion,1,2400,Pune,2024-01-08
+1014,Jacket,Fashion,1,3500,Kolkata,2024-01-09
+1015,Air Conditioner,Home Appliances,1,40000,Chennai,2024-01-09
+1016,Water Purifier,Home Appliances,1,9500,Bangalore,2024-01-10
+1017,Speaker,Electronics,2,3200,Hyderabad,2024-01-10
+1018,Power Bank,Electronics,2,1500,Mumbai,2024-01-11
+1019,Camera,Electronics,1,52000,Delhi,2024-01-11
+1020,Tripod,Electronics,1,2200,Pune,2024-01-12
+1021,Sandals,Fashion,2,1100,Kolkata,2024-01-12
+1022,Sofa,Home Furniture,1,25000,Chennai,2024-01-13
+1023,Chair,Home Furniture,4,1500,Bangalore,2024-01-13
+1024,Table,Home Furniture,1,7000,Hyderabad,2024-01-14
+1025,Lamp,Home Decor,2,900,Mumbai,2024-01-14
+1026,Curtains,Home Decor,2,1800,Delhi,2024-01-15
+1027,Carpet,Home Decor,1,4500,Pune,2024-01-15
+1028,Blender,Home Appliances,1,3000,Kolkata,2024-01-16
+1029,Toaster,Home Appliances,1,2000,Chennai,2024-01-16
+1030,Iron Box,Home Appliances,1,1700,Bangalore,2024-01-17
+1031,Printer,Electronics,1,8500,Hyderabad,2024-01-17
+1032,Monitor,Electronics,1,12000,Mumbai,2024-01-18
+1033,Router,Electronics,2,2500,Delhi,2024-01-18
+1034,Bed Sheet,Home Decor,3,1200,Pune,2024-01-19
+1035,Pillow,Home Decor,4,600,Kolkata,2024-01-19
+1036,Notebook,Stationery,5,80,Chennai,2024-01-20
+1037,Pen,Stationery,10,20,Bangalore,2024-01-20
+1038,Desk Organizer,Stationery,2,450,Hyderabad,2024-01-21
+1039,Whiteboard,Stationery,1,1500,Mumbai,2024-01-21
+1040,Office Chair,Home Furniture,1,8500,Delhi,2024-01-22
