@@ -16,8 +16,7 @@ from __future__ import annotations
 
 import os
 import sys
-import traceback
-from datetime import timedelta
+from datetime import datetime, timedelta
 from pathlib import Path
 
 import pendulum
@@ -33,10 +32,18 @@ if str(_PROJECT_ROOT) not in sys.path:
 
 # ── Import shared utilities (graceful fallback if not installed) ──────────────
 try:
-    from utils.notifications import send_pipeline_notification
+    from utils.notifications import (
+        trigger_error_email,
+        trigger_success_email,
+        send_pipeline_notification,   # kept for generic/test use
+    )
 except ImportError:
+    def trigger_error_email(*args, **kwargs):     # type: ignore[misc]
+        pass
+    def trigger_success_email(*args, **kwargs):   # type: ignore[misc]
+        pass
     def send_pipeline_notification(*args, **kwargs):  # type: ignore[misc]
-        """No-op when resend / utils is unavailable."""
+        pass
 
 try:
     from utils.pipeline_status import write_running, write_success, write_error
@@ -48,7 +55,6 @@ except ImportError:
     def write_error(*args, **kwargs):  # type: ignore[misc]
         pass
 
-# ── Constants ─────────────────────────────────────────────────────────────────
 PROJECT_ROOT     = os.environ.get("PROJECT_ROOT", str(_PROJECT_ROOT))
 SPARK_JOB_PATH   = os.environ.get(
     "SPARK_JOB_PATH",
@@ -82,71 +88,139 @@ def log_pipeline_finish(**context) -> None:
     run_id = context["run_id"]
     ti     = context["ti"]
 
-    msg = f"Pipeline finished successfully | dag={dag_id} | run={run_id}"
-    ti.log.info(msg)
+    ti.log.info("Pipeline finished successfully | dag=%s | run=%s", dag_id, run_id)
 
+    # ── 1. Update shared status file (dashboard reads this) ───────────────────
     write_success(dag_id, run_id)
 
-    send_pipeline_notification(
-        status  = "SUCCESS",
-        message = f"Pipeline '{dag_id}' completed successfully.",
-        details = f"Run ID  : {run_id}\nSchedule: automatic",
-    )
+    # ── 2. Compute wall-clock duration ────────────────────────────────────────
+    start_date = getattr(ti, "start_date", None)
+    try:
+        from datetime import timezone
+        duration = (
+            datetime.now(timezone.utc) - start_date
+        ).total_seconds() if start_date else 0.0
+    except Exception:
+        duration = 0.0
+
+    # ── 3. Count tasks that ran in this DAG run ────────────────────────────────
+    task_count = 0
+    try:
+        dag_run    = context.get("dag_run")
+        task_count = len(dag_run.get_task_instances()) if dag_run else 0
+    except Exception:
+        pass
+
+    # ── 4. Send SUCCESS email ──────────────────────────────────────────────────
+    try:
+        trigger_success_email(
+            dag_id           = dag_id,
+            run_id           = run_id,
+            duration_seconds = duration,
+            task_count       = task_count,
+        )
+    except Exception as exc:  # noqa: BLE001
+        ti.log.warning("Success email failed: %s", exc)
+
+
+def _read_task_logs(ti) -> str:
+    """Read the tail of the log file and extract 'Smart Highlights' (ERROR/Exception lines)."""
+    try:
+        from airflow.configuration import conf
+        base_log_folder = conf.get("logging", "BASE_LOG_FOLDER")
+        
+        run_id = ti.run_id.replace(":", "_").replace("+", "_")
+        log_path = Path(base_log_folder) / ti.dag_id / ti.task_id / run_id / f"{ti.try_number}.log"
+        
+        if not log_path.exists():
+            exec_date = ti.execution_date.isoformat().replace(":", "_")
+            log_path = Path(base_log_folder) / ti.dag_id / ti.task_id / exec_date / f"{ti.try_number}.log"
+
+        if log_path.exists():
+            with open(log_path, "r", encoding="utf-8", errors="replace") as f:
+                all_lines = f.readlines()
+                
+                # ── 1. Extract Highlights (Scan last 500 lines for keywords) ────
+                keywords = ["ERROR", "CRITICAL", "EXCEPTION", "SPARK", "FAILED", "JAVA", "PYTHON"]
+                highlights = []
+                for line in all_lines[-500:]:
+                    if any(key in line.upper() for key in keywords):
+                        highlights.append(line.strip())
+                
+                highlight_text = ""
+                if highlights:
+                    highlight_text = "── SERVICE ERROR HIGHLIGHTS ──\n" + "\n".join(highlights[-15:]) + "\n\n"
+                
+                # ── 2. Combine with tail ────────────────────────────────────────
+                tail = "── RECENT LOG TAIL ──\n" + "".join(all_lines[-40:])
+                return highlight_text + tail
+
+        return "Log file not found at: " + str(log_path)
+    except Exception as e:
+        return f"Could not retrieve logs: {str(e)}"
 
 
 def on_task_failure(context) -> None:
     """
-    Airflow `on_failure_callback`.
-    Called immediately when a task fails (before any retry delay).
-    1. Writes ERROR to the shared status file → dashboard shows red banner.
-    2. Sends an email with full traceback to the owner.
+    Airflow on_failure_callback.
+    Fires immediately when any task fails — BEFORE any retry delay.
+
+    Steps:
+      1. Capture full traceback from the exception.
+      2. Write ERROR to pipeline_status.json  →  dashboard shows red banner.
+      3. Call trigger_error_email()            →  owner receives detailed email.
     """
     ti        = context["task_instance"]
     exception = context.get("exception")
 
-    # 1 ── Capture traceback
+    # ── 1. Build traceback and retrieve logs ──────────────────────────────────
     if exception:
-        tb_lines = traceback.format_exception(
-            type(exception), exception, exception.__traceback__
-        )
-        tb_text = "".join(tb_lines)
+        try:
+            import traceback as _tb
+            tb_text = "".join(
+                _tb.format_exception(type(exception), exception, exception.__traceback__)
+            )
+        except Exception:
+            tb_text = str(exception)
     else:
         tb_text = "No traceback available."
 
-    summary  = (
-        f"Task '{ti.task_id}' in DAG '{ti.dag_id}' failed "
-        f"(attempt {ti.try_number} of {ti.max_tries + 1})."
-    )
-    details = (
-        f"DAG ID    : {ti.dag_id}\n"
-        f"Task ID   : {ti.task_id}\n"
-        f"Run ID    : {ti.run_id}\n"
-        f"Attempt   : {ti.try_number} / {ti.max_tries + 1}\n"
-        f"Exception : {str(exception)}\n\n"
-        f"─── Full Traceback ───\n{tb_text}"
+    # Retrieve actual Airflow Task Logs
+    task_logs = _read_task_logs(ti)
+
+    exception_msg = str(exception) if exception else "Unknown error"
+    attempt       = getattr(ti, "try_number", 1)
+    max_attempts  = getattr(ti, "max_tries", 2) + 1
+
+    ti.log.error(
+        "[PIPELINE FAILURE] dag=%s task=%s attempt=%s/%s\n%s",
+        ti.dag_id, ti.task_id, attempt, max_attempts, tb_text,
     )
 
-    ti.log.error("[PIPELINE FAILURE] %s\n%s", summary, details)
-
-    # 2 ── Write to shared status file → dashboard picks this up immediately
+    # ── 2. Write shared status file → dashboard picks this up immediately ──────
     write_error(
         dag_id     = ti.dag_id,
         task_id    = ti.task_id,
         run_id     = ti.run_id,
         exception  = exception,
-        try_number = ti.try_number,
+        try_number = attempt,
     )
 
-    # 3 ── Send email immediately (fire-and-forget; don't let email failure
-    #       mask the original pipeline error)
+    # ── 3. Send ERROR email immediately with task logs ────────────────────────
     try:
-        send_pipeline_notification(
-            status  = "ERROR",
-            message = summary,
-            details = details,
+        trigger_error_email(
+            dag_id        = ti.dag_id,
+            task_id       = ti.task_id,
+            run_id        = ti.run_id,
+            attempt       = attempt,
+            max_attempts  = max_attempts,
+            exception_msg = exception_msg,
+            tb_text       = tb_text,
+            task_logs     = task_logs,  # PASS LOGS HERE
         )
-    except Exception as notify_exc:  # noqa: BLE001
-        ti.log.warning("Email notification failed: %s", notify_exc)
+    except Exception as email_exc:  # noqa: BLE001
+        # Never let the notification failure mask the original pipeline error
+        ti.log.warning("Error email failed to send: %s", email_exc)
 
 
 # ── Spark runner ───────────────────────────────────────────────────────────────

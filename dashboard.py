@@ -105,65 +105,135 @@ def create_spark_session() -> SparkSession:
     return configure_spark_with_delta_pip(builder).getOrCreate()
 
 
-def _compute_medallion_realtime(input_path: str) -> tuple[pd.DataFrame, pd.DataFrame]:
-    """Computes real-time Bronze and Silver views from raw input files."""
+def _compute_medallion_realtime(input_path: str) -> tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame]:
+    """Computes real-time Bronze, Silver, and File Issues views from raw input files."""
     import glob
-    csv_files = glob.glob(os.path.join(input_path, "*.csv"))
-    if not csv_files:
-        return pd.DataFrame(), pd.DataFrame()
+    all_files = glob.glob(os.path.join(input_path, "*"))
+    if not all_files:
+        return pd.DataFrame(), pd.DataFrame(), pd.DataFrame()
 
     dfs = []
-    for f in csv_files:
+    file_issues = []
+    
+    for f in all_files:
+        filename = os.path.basename(f)
+        
+        # ── 1. Check for Unsupported File Extension ──
+        if not f.lower().endswith('.csv'):
+            file_issues.append({
+                "order_id": "N/A",
+                "source_file": filename,
+                "Reason": f"Unsupported File Format: File extension '{Path(f).suffix}' is not supported. Use .csv only.",
+                "order_date": "N/A",
+                "product": "N/A"
+            })
+            continue
+
         try:
             import csv
             with open(f, 'r', encoding='utf-8-sig') as file:
+                # Use Sniffer to check for corruption/validity if possible
+                try:
+                    dialect = csv.Sniffer().sniff(file.read(2048))
+                    file.seek(0)
+                except Exception:
+                    # Sniffer failed, could be a very small file or actually corrupted
+                    file.seek(0)
+                    pass
+                
                 reader = csv.reader(file)
-                data = list(reader)
-            if not data: continue
+                try:
+                    data = list(reader)
+                except Exception as e:
+                    file_issues.append({
+                        "order_id": "CRITICAL",
+                        "source_file": filename,
+                        "Reason": f"Corrupted CSV: File could not be parsed. Error: {str(e)}",
+                        "order_date": "N/A",
+                        "product": "N/A"
+                    })
+                    continue
+                    
+            if not data: 
+                file_issues.append({
+                    "order_id": "EMPTY",
+                    "source_file": filename,
+                    "Reason": "Corrupted Data: File is empty or has no rows.",
+                    "order_date": "N/A",
+                    "product": "N/A"
+                })
+                continue
             
             first_row = data[0]
             header_keywords = ["id", "order", "date", "revenue", "product", "amount"]
             has_header = any(any(key in str(col).lower() for key in header_keywords) for col in first_row)
             
-            temp_df = pd.DataFrame(data)
-            if has_header:
-                num_cols = len(first_row)
-                temp_df = temp_df.iloc[:, :num_cols]
-                temp_df.columns = first_row
-                temp_df = temp_df.iloc[1:].reset_index(drop=True)
-            else:
-                canonical = ["order_id", "customer_id", "product", "unit_price", "quantity", "order_date"]
-                num_cols = len(canonical)
-                temp_df = temp_df.iloc[:, :num_cols]
-                actual_cols = temp_df.shape[1]
-                temp_df.columns = canonical[:actual_cols]
+            try:
+                temp_df = pd.DataFrame(data)
+                if has_header:
+                    num_cols = len(first_row)
+                    temp_df = temp_df.iloc[:, :num_cols]
+                    temp_df.columns = first_row
+                    temp_df = temp_df.iloc[1:].reset_index(drop=True)
+                else:
+                    canonical = ["order_id", "customer_id", "product", "unit_price", "quantity", "order_date"]
+                    # If columns don't match our min expectations, it's corrupted for our use case
+                    if len(first_row) < 3:
+                        raise ValueError(f"Inconsistent columns: Expected at least 3, found {len(first_row)}")
+                    num_cols = len(canonical)
+                    temp_df = temp_df.iloc[:, :num_cols]
+                    actual_cols = temp_df.shape[1]
+                    temp_df.columns = canonical[:actual_cols]
 
-            if temp_df.empty:
-                continue
+                if temp_df.empty:
+                    continue
 
-            # Normalize and deduplicate headers before concat.
-            temp_df.columns = [str(c).strip().lower() for c in temp_df.columns]
-            temp_df = temp_df.loc[:, ~temp_df.columns.duplicated(keep="first")]
+                # Normalize and deduplicate headers
+                temp_df.columns = [str(c).strip().lower() for c in temp_df.columns]
+                temp_df = temp_df.loc[:, ~temp_df.columns.duplicated(keep="first")]
 
-            rename_map = {
-                "product_name": "product",
-                "date": "order_date",
-                "event_timestamp": "order_date",
-            }
-            temp_df.rename(columns=rename_map, inplace=True)
+                rename_map = {
+                    "product_name": "product",
+                    "date": "order_date",
+                    "event_timestamp": "order_date",
+                    "id": "order_id"
+                }
+                temp_df.rename(columns=rename_map, inplace=True)
 
-            if "order_id" not in temp_df.columns or "order_date" not in temp_df.columns:
-                continue
-            
-            # Add metadata for Bronze feel
-            temp_df["ingestion_timestamp"] = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
-            temp_df["source_file"] = os.path.basename(f)
-            dfs.append(temp_df)
-        except Exception:
-            continue
+                if "order_id" not in temp_df.columns or "order_date" not in temp_df.columns:
+                    file_issues.append({
+                        "order_id": "SCHEMA_ERROR",
+                        "source_file": filename,
+                        "Reason": "Validation Failed: Missing required columns (order_id, order_date).",
+                        "order_date": "N/A",
+                        "product": "N/A"
+                    })
+                    continue
+                
+                temp_df["ingestion_timestamp"] = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+                temp_df["source_file"] = filename
+                dfs.append(temp_df)
+                
+            except Exception as e:
+                file_issues.append({
+                    "order_id": "PARSE_ERROR",
+                    "source_file": filename,
+                    "Reason": f"Corrupted Data: Could not structure data properly. Error: {str(e)}",
+                    "order_date": "N/A",
+                    "product": "N/A"
+                })
+        except Exception as e:
+            file_issues.append({
+                "order_id": "IO_ERROR",
+                "source_file": filename,
+                "Reason": f"Access Error: File could not be read. Error: {str(e)}",
+                "order_date": "N/A",
+                "product": "N/A"
+            })
 
+    file_issues_df = pd.DataFrame(file_issues)
     if not dfs:
-        return pd.DataFrame(), pd.DataFrame()
+        return pd.DataFrame(), pd.DataFrame(), file_issues_df
 
     bronze_rt = pd.concat(dfs, ignore_index=True, sort=False)
 
@@ -172,7 +242,7 @@ def _compute_medallion_realtime(input_path: str) -> tuple[pd.DataFrame, pd.DataF
     silver_rt = bronze_rt.drop_duplicates(subset=dedupe_cols or None, keep="first").copy()
     silver_rt["processing_timestamp"] = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
     
-    return bronze_rt, silver_rt
+    return bronze_rt, silver_rt, file_issues_df
 
 
 def _compute_gold_from_raw(input_path: str) -> pd.DataFrame:
@@ -501,14 +571,18 @@ def load_delta_history(path_str: str) -> pd.DataFrame:
         return pd.DataFrame()
 
 
-def build_validation_frame(bronze_df: pd.DataFrame, silver_df: pd.DataFrame) -> pd.DataFrame:
-    if bronze_df.empty:
+def build_validation_frame(bronze_df: pd.DataFrame, silver_df: pd.DataFrame, file_issues_df: pd.DataFrame = None) -> pd.DataFrame:
+    if bronze_df.empty and (file_issues_df is None or file_issues_df.empty):
         return pd.DataFrame()
 
     checks: list[pd.DataFrame] = []
     
+    # 0. Add File-Level Issues (Unsupported formats, Corrupted files)
+    if file_issues_df is not None and not file_issues_df.empty:
+        checks.append(file_issues_df)
+
     # 1. Check for Duplicate IDs (Identify which specific ID is repeated)
-    if "order_id" in bronze_df.columns:
+    if not bronze_df.empty and "order_id" in bronze_df.columns:
         # We flag all instances of the duplicate so the user can see the conflict
         dup_ids = bronze_df[bronze_df.duplicated(subset=["order_id"], keep=False)].copy()
         if not dup_ids.empty:
@@ -516,29 +590,31 @@ def build_validation_frame(bronze_df: pd.DataFrame, silver_df: pd.DataFrame) -> 
             checks.append(dup_ids)
 
     # 2. Check for Missing/Incomplete Data
-    critical_cols = ["order_id", "order_date"]
-    for col in critical_cols:
-        if col in bronze_df.columns:
-            null_mask = bronze_df[col].isna() | (bronze_df[col].astype(str) == "nan") | (bronze_df[col].astype(str) == "")
-            null_rows = bronze_df[null_mask].copy()
-            if not null_rows.empty:
-                null_rows["Reason"] = f"Validation Failed: {col} is missing or null"
-                checks.append(null_rows)
+    if not bronze_df.empty:
+        critical_cols = ["order_id", "order_date"]
+        for col in critical_cols:
+            if col in bronze_df.columns:
+                null_mask = bronze_df[col].isna() | (bronze_df[col].astype(str) == "nan") | (bronze_df[col].astype(str) == "")
+                null_rows = bronze_df[null_mask].copy()
+                if not null_rows.empty:
+                    null_rows["Reason"] = f"Validation Failed: {col} is missing or null"
+                    checks.append(null_rows)
 
     # 3. Check for Negative Values (Quality Check)
-    numeric_cols = ["quantity", "unit_price", "revenue", "price"]
-    for col in numeric_cols:
-        if col in bronze_df.columns:
-            try:
-                neg_mask = pd.to_numeric(bronze_df[col], errors="coerce") < 0
-                neg_rows = bronze_df[neg_mask].copy()
-                if not neg_rows.empty:
-                    neg_rows["Reason"] = f"Quality Alert: Negative value detected in {col}"
-                    checks.append(neg_rows)
-            except: pass
+    if not bronze_df.empty:
+        numeric_cols = ["quantity", "unit_price", "revenue", "price"]
+        for col in numeric_cols:
+            if col in bronze_df.columns:
+                try:
+                    neg_mask = pd.to_numeric(bronze_df[col], errors="coerce") < 0
+                    neg_rows = bronze_df[neg_mask].copy()
+                    if not neg_rows.empty:
+                        neg_rows["Reason"] = f"Quality Alert: Negative value detected in {col}"
+                        checks.append(neg_rows)
+                except: pass
 
     # 4. Check for Future Dates (Temporal Check)
-    if "order_date" in bronze_df.columns:
+    if not bronze_df.empty and "order_date" in bronze_df.columns:
         try:
             dates = pd.to_datetime(bronze_df["order_date"], errors="coerce")
             future_mask = dates > pd.Timestamp.now() + pd.Timedelta(days=1)
@@ -555,7 +631,7 @@ def build_validation_frame(bronze_df: pd.DataFrame, silver_df: pd.DataFrame) -> 
     result = pd.concat(checks, ignore_index=True).drop_duplicates()
     
     preferred_cols = [
-        c for c in ["order_id", "product", "category", "quantity", "price", "order_date", "Reason"]
+        c for c in ["order_id", "source_file", "product", "category", "quantity", "price", "order_date", "Reason"]
         if c in result.columns
     ]
     return result[preferred_cols] if preferred_cols else result
@@ -601,7 +677,7 @@ def render_medallion_section() -> None:
     input_path = script_dir / "data" / "input"
 
     # HYBRID ENGINE: Load real-time data first to avoid "Empty" errors
-    rt_bronze, rt_silver = _compute_medallion_realtime(str(input_path))
+    rt_bronze, rt_silver, file_issues_df = _compute_medallion_realtime(str(input_path))
 
     # Try loading Delta Histories if they exist (for the ACID part)
     bronze_history = pd.DataFrame()
@@ -656,10 +732,10 @@ def render_medallion_section() -> None:
         "validation",
     )
     
-    if display_bronze.empty:
+    if display_bronze.empty and (file_issues_df is None or file_issues_df.empty):
         st.info("Waiting for data...")
     else:
-        validation_df = build_validation_frame(display_bronze, rt_silver)
+        validation_df = build_validation_frame(display_bronze, rt_silver, file_issues_df)
         
         col_v1, col_v2 = st.columns(2)
         with col_v1:
@@ -885,7 +961,7 @@ def render_dashboard_home() -> None:
             try:
                 # To simulate the Medallion funnel: we'll get real-time raw counts vs accepted silver counts
                 raw_input = os.path.join(os.path.dirname(os.path.abspath(__file__)), "data", "input")
-                rt_bronze, rt_silver = _compute_medallion_realtime(raw_input)
+                rt_bronze, rt_silver, _ = _compute_medallion_realtime(raw_input)
                 
                 bronze_count = len(rt_bronze)
                 silver_count = len(rt_silver)
@@ -1011,90 +1087,331 @@ def render_dashboard_home() -> None:
     st.caption(f"Last heartbeat at {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
 
 
+def _run_live_quality_checks(bronze_df: pd.DataFrame, silver_df: pd.DataFrame, file_issues_df: pd.DataFrame = None) -> dict:
+    """
+    Run all data quality checks live against the current Bronze DataFrame.
+    Returns a report dict structured identically to what quality_report.json used to provide,
+    so the rendering logic below is reusable for both sources.
+    """
+    now_str = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    layers_out = []
+
+    # ── 0. Input Folder Integrity ───────────────────────────────────────────
+    file_checks = []
+    file_count = 0
+    if file_issues_df is not None:
+        file_count = len(file_issues_df)
+        unsupported = file_issues_df[file_issues_df["Reason"].str.contains("Unsupported", na=False)]
+        corrupted = file_issues_df[file_issues_df["Reason"].str.contains("Corrupted", na=False)]
+        
+        file_checks.append({
+            "name": "File Formats",
+            "status": "PASS" if unsupported.empty else "WARNING",
+            "message": "All files use supported .csv format." if unsupported.empty 
+                       else f"{len(unsupported)} file(s) follow unsupported formats."
+        })
+        file_checks.append({
+            "name": "Data Integrity",
+            "status": "PASS" if corrupted.empty else "CRITICAL",
+            "message": "No corrupted CSVs detected." if corrupted.empty 
+                       else f"{len(corrupted)} corrupted file(s) found in input folder."
+        })
+
+    layers_out.append({
+        "layer": "input",
+        "row_count": file_count,
+        "columns": ["file_name", "reason"],
+        "checks": file_checks,
+        "critical_failures": sum(1 for c in file_checks if c["status"] == "CRITICAL"),
+        "warnings": sum(1 for c in file_checks if c["status"] == "WARNING"),
+        "status": "FAIL" if any(c["status"] == "CRITICAL" for c in file_checks) else ("WARN" if any(c["status"] == "WARNING" for c in file_checks) else "PASS")
+    })
+
+    for layer_name, df in [("bronze", bronze_df), ("silver", silver_df)]:
+        checks = []
+        row_count = len(df)
+        cols_present = list(df.columns)
+
+        # ── 1. Row Count check ─────────────────────────────────────────────
+        checks.append({
+            "name":    "Row Count",
+            "status":  "PASS" if row_count > 0 else "CRITICAL",
+            "message": f"{row_count:,} rows found." if row_count > 0 else "Table is empty — no data loaded.",
+        })
+
+        # ── 2. Schema / required columns ──────────────────────────────────
+        required = ["order_id", "order_date"]
+        missing_cols = [c for c in required if c not in df.columns]
+        checks.append({
+            "name":    "Required Columns Present",
+            "status":  "PASS" if not missing_cols else "CRITICAL",
+            "message": "All required columns found." if not missing_cols
+                       else f"Missing columns: {', '.join(missing_cols)}",
+        })
+
+        if df.empty:
+            layers_out.append({
+                "layer": layer_name, "row_count": 0, "columns": cols_present,
+                "checks": checks, "critical_failures": 1, "warnings": 0, "status": "FAIL",
+            })
+            continue
+
+        # ── 3. Duplicate IDs ───────────────────────────────────────────────
+        if "order_id" in df.columns:
+            dup_count = int(df.duplicated(subset=["order_id"], keep=False).sum())
+            dup_ids   = df.loc[df.duplicated(subset=["order_id"], keep=False), "order_id"].unique().tolist()
+            sample    = ", ".join(str(x) for x in dup_ids[:5])
+            suffix    = f" … and {len(dup_ids)-5} more" if len(dup_ids) > 5 else ""
+            checks.append({
+                "name":    "No Duplicate Order IDs",
+                "status":  "PASS" if dup_count == 0 else "WARNING",
+                "message": f"No duplicates found." if dup_count == 0
+                           else f"{dup_count} duplicate rows for IDs: {sample}{suffix}",
+            })
+
+        # ── 4. Null / empty critical fields ───────────────────────────────
+        null_report = []
+        for col in required:
+            if col in df.columns:
+                n = int(df[col].isna().sum()) + int((df[col].astype(str).str.strip() == "").sum())
+                if n:
+                    null_report.append(f"{col}: {n} null/empty")
+        checks.append({
+            "name":    "No Null Critical Fields",
+            "status":  "PASS" if not null_report else "CRITICAL",
+            "message": "All critical fields populated." if not null_report
+                       else " | ".join(null_report),
+        })
+
+        # ── 5. Negative numeric values ────────────────────────────────────
+        neg_issues = []
+        for col in ["unit_price", "quantity", "revenue"]:
+            if col in df.columns:
+                neg = int((pd.to_numeric(df[col], errors="coerce").fillna(0) < 0).sum())
+                if neg:
+                    neg_issues.append(f"{col}: {neg} negative value(s)")
+        checks.append({
+            "name":    "No Negative Numeric Values",
+            "status":  "PASS" if not neg_issues else "WARNING",
+            "message": "All numeric values are non-negative." if not neg_issues
+                       else " | ".join(neg_issues),
+        })
+
+        # ── 6. Date parse errors ──────────────────────────────────────────
+        if "order_date" in df.columns:
+            parsed = pd.to_datetime(df["order_date"], errors="coerce")
+            bad_dates = int(parsed.isna().sum())
+            checks.append({
+                "name":    "Valid Date Format",
+                "status":  "PASS" if bad_dates == 0 else "WARNING",
+                "message": "All dates parse correctly." if bad_dates == 0
+                           else f"{bad_dates} row(s) have unparsable dates.",
+            })
+
+            # ── 7. Future dates ───────────────────────────────────────────
+            future = int((parsed > pd.Timestamp.now() + pd.Timedelta(days=1)).sum())
+            checks.append({
+                "name":    "No Future Dates",
+                "status":  "PASS" if future == 0 else "WARNING",
+                "message": "No future dates detected." if future == 0
+                           else f"{future} row(s) have dates set in the future.",
+            })
+
+        # ── 8. Silver dedup effectiveness (only for silver) ───────────────
+        if layer_name == "silver" and not bronze_df.empty and "order_id" in df.columns:
+            removed = len(bronze_df) - len(df)
+            pct     = (removed / len(bronze_df) * 100) if len(bronze_df) else 0
+            checks.append({
+                "name":    "Deduplication Applied",
+                "status":  "PASS",
+                "message": f"{removed} duplicate row(s) removed ({pct:.1f}% of Bronze). "
+                           f"{len(df):,} unique records remain.",
+            })
+
+        criticals = sum(1 for c in checks if c["status"] == "CRITICAL")
+        warnings  = sum(1 for c in checks if c["status"] == "WARNING")
+        layer_status = "FAIL" if criticals else ("WARN" if warnings else "PASS")
+
+        layers_out.append({
+            "layer":             layer_name,
+            "row_count":         row_count,
+            "columns":           cols_present,
+            "checks":            checks,
+            "critical_failures": criticals,
+            "warnings":          warnings,
+            "status":            layer_status,
+        })
+
+    # Overall status
+    all_statuses = [l["status"] for l in layers_out]
+    overall = "FAIL" if "FAIL" in all_statuses else ("WARN" if "WARN" in all_statuses else "PASS")
+
+    return {
+        "overall_status": overall,
+        "generated_at":   now_str,
+        "source":         "live",
+        "layers":         layers_out,
+    }
+
+
+@st.cache_data(ttl=2, show_spinner=False)
+def _cached_quality_report(input_path: str) -> dict:
+    """Cached wrapper so the report recalculates at most every 2 seconds."""
+    bronze_df, silver_rt, file_issues_df = _compute_medallion_realtime(input_path)
+    return _run_live_quality_checks(bronze_df, silver_rt, file_issues_df)
+
+
 def render_quality_report() -> None:
-    st.title("Data Quality & Validation Report")
+    st.title("📋 Data Quality & Validation Report")
+    st.caption("Live report — recalculates automatically as your CSV data changes.")
 
     script_dir = Path(__file__).resolve().parent
-    report_path = script_dir / "data" / "quality_report.json"
+    input_path = str(script_dir / "data" / "input")
 
-    if not report_path.exists():
-        st.warning("No quality report found yet. Trigger a pipeline run from Airflow to generate one.")
-        st.info("Run the `daily_pyspark_pipeline` DAG in Airflow, then refresh this page.")
-        return
+    # ── Run live checks ───────────────────────────────────────────────────────
+    report = _cached_quality_report(input_path)
 
-    with open(report_path) as f:
-        report = __import__("json").load(f)
+    overall      = report["overall_status"]
+    generated_at = report["generated_at"]
+    layers       = report["layers"]
 
-    overall = report.get("overall_status", "UNKNOWN")
-    generated_at = report.get("generated_at", "")
-
-    status_color = {"PASS": "green", "WARN": "orange", "FAIL": "red"}.get(overall, "gray")
-    status_icon  = {"PASS": "✓", "WARN": "⚠", "FAIL": "✗"}.get(overall, "?")
+    # ── Overall status banner ─────────────────────────────────────────────────
+    _oc  = {"PASS": "#22c55e", "WARN": "#f97316", "FAIL": "#ef4444"}.get(overall, "#94a3b8")
+    _oi  = {"PASS": "✅", "WARN": "⚠️", "FAIL": "❌"}.get(overall, "❓")
+    _obg = {"PASS": "rgba(34,197,94,0.12)", "WARN": "rgba(249,115,22,0.12)",
+            "FAIL": "rgba(239,68,68,0.12)"}.get(overall, "rgba(148,163,184,0.1)")
 
     st.markdown(
         f"""
-        <div style="border-radius:12px; padding:1rem 1.5rem; margin-bottom:1rem;
-                    background:{'rgba(34,197,94,0.15)' if overall=='PASS' else 'rgba(249,115,22,0.15)' if overall=='WARN' else 'rgba(239,68,68,0.15)'};
-                    border:1px solid {status_color};">
-            <span style="font-size:2rem; font-weight:700; color:{status_color};">{status_icon} {overall}</span>
-            <span style="margin-left:1.5rem; color:#64748b; font-size:0.9rem;">Generated: {generated_at}</span>
+        <div style="border-radius:12px; padding:1rem 1.5rem; margin-bottom:1.2rem;
+                    background:{_obg}; border:1.5px solid {_oc};">
+            <span style="font-size:2rem; font-weight:800; color:{_oc};">
+                {_oi} {overall}
+            </span>
+            <span style="margin-left:1.5rem; color:#94a3b8; font-size:0.9rem;">
+                Last computed: {generated_at}
+            </span>
         </div>
         """,
         unsafe_allow_html=True,
     )
 
-    layers = report.get("layers", [])
+    if not layers:
+        st.warning("No data found in `data/input/`. Add CSV files to see the report.")
+        return
 
-    # ── Summary row ──────────────────────────────────────────────────────────
+    # ── Summary layer cards ───────────────────────────────────────────────────
     cols = st.columns(len(layers))
     for col, layer in zip(cols, layers):
-        s = layer["status"]
-        color = {"PASS": "green", "WARN": "orange", "FAIL": "red"}.get(s, "gray")
-        icon  = {"PASS": "✓", "WARN": "⚠", "FAIL": "✗"}.get(s, "?")
+        s     = layer["status"]
+        color = {"PASS": "#22c55e", "WARN": "#f97316", "FAIL": "#ef4444"}.get(s, "#94a3b8")
+        icon  = {"PASS": "✅", "WARN": "⚠️", "FAIL": "❌"}.get(s, "❓")
         with col:
             st.markdown(
-                f"""<div style="border-radius:10px; padding:0.8rem; text-align:center;
-                               border:1px solid {color}; background:rgba(0,0,0,0.03);">
-                    <div style="font-size:1.4rem; font-weight:700; color:{color};">{icon} {s}</div>
-                    <div style="font-size:1.1rem; font-weight:600;">{layer['layer'].upper()}</div>
-                    <div style="color:#64748b; font-size:0.85rem;">{layer['row_count']:,} rows</div>
-                    <div style="color:#ef4444; font-size:0.8rem;">{layer['critical_failures']} critical</div>
+                f"""
+                <div style="border-radius:12px; padding:1rem; text-align:center;
+                            border:1.5px solid {color}; background:rgba(0,0,0,0.05);">
+                    <div style="font-size:1.6rem; font-weight:800; color:{color};">{icon}</div>
+                    <div style="font-size:1.1rem; font-weight:700; color:#e2e8f0; margin:4px 0;">
+                        {layer['layer'].upper()}
+                    </div>
+                    <div style="color:#94a3b8; font-size:0.85rem;">{layer['row_count']:,} rows</div>
+                    <div style="color:#ef4444; font-size:0.8rem; margin-top:4px;">
+                        {layer['critical_failures']} critical
+                    </div>
                     <div style="color:#f97316; font-size:0.8rem;">{layer['warnings']} warnings</div>
-                </div>""",
+                </div>
+                """,
                 unsafe_allow_html=True,
             )
 
     st.divider()
 
-    # ── Per-layer check tables ────────────────────────────────────────────────
+    # ── Aggregate metrics row ─────────────────────────────────────────────────
+    total_rows    = sum(l["row_count"] for l in layers)
+    total_crit    = sum(l["critical_failures"] for l in layers)
+    total_warn    = sum(l["warnings"] for l in layers)
+    total_checks  = sum(len(l["checks"]) for l in layers)
+    total_pass    = sum(
+        sum(1 for c in l["checks"] if c["status"] == "PASS") for l in layers
+    )
+
+    m1, m2, m3, m4 = st.columns(4)
+    m1.metric("Total Rows Checked",   f"{total_rows:,}")
+    m2.metric("Checks Run",           f"{total_checks}")
+    m3.metric("✅ Passing",            f"{total_pass}")
+    m4.metric("Issues Found",         f"{total_crit + total_warn}",
+              delta=f"{total_crit} critical" if total_crit else None,
+              delta_color="inverse")
+
+    st.divider()
+
+    # ── Per-layer expandable check tables ─────────────────────────────────────
+    def _color_status(val: str) -> str:
+        return {
+            "PASS":     "color: #22c55e; font-weight:600",
+            "WARNING":  "color: #f97316; font-weight:600",
+            "CRITICAL": "color: #ef4444; font-weight:700",
+            "WARN":     "color: #f97316; font-weight:600",
+        }.get(val, "")
+
     for layer in layers:
-        with st.expander(f"{layer['layer'].upper()} — {layer['row_count']:,} rows — {layer['status']}", expanded=True):
+        lname = layer["layer"].upper()
+        lstatus = layer["status"]
+        lrows   = layer["row_count"]
+
+        with st.expander(
+            f"{lname} — {lrows:,} rows — {lstatus}",
+            expanded=True,
+        ):
+            # Columns present
+            st.caption(f"**Columns:** {', '.join(layer.get('columns', []))}")
+
             checks = layer.get("checks", [])
             if not checks:
-                st.info("No checks recorded.")
+                st.info("No checks available.")
                 continue
 
-            rows = []
+            check_rows = []
             for c in checks:
-                icon = {"PASS": "✓", "WARNING": "⚠", "CRITICAL": "✗", "WARN": "⚠"}.get(c["status"], "?")
-                rows.append({"": icon, "Check": c["name"], "Status": c["status"], "Detail": c["message"]})
+                icon = {"PASS": "✅", "WARNING": "⚠️", "CRITICAL": "❌", "WARN": "⚠️"}.get(
+                    c["status"], "❓"
+                )
+                check_rows.append({
+                    "":       icon,
+                    "Check":  c["name"],
+                    "Status": c["status"],
+                    "Detail": c["message"],
+                })
 
-            df = pd.DataFrame(rows)
-
-            def _color_status(val):
-                return {
-                    "PASS":     "color: green",
-                    "WARNING":  "color: orange",
-                    "CRITICAL": "color: red; font-weight:bold",
-                }.get(val, "")
-
+            check_df = pd.DataFrame(check_rows)
             st.dataframe(
-                df.style.map(_color_status, subset=["Status"]),
+                check_df.style.map(_color_status, subset=["Status"]),
                 use_container_width=True,
                 hide_index=True,
             )
 
-            st.caption(f"Columns present: {', '.join(layer.get('columns', []))}")
+    st.divider()
+
+    # ── Duplicate detail table ────────────────────────────────────────────────
+    bronze_df, silver_df, file_issues_df = _compute_medallion_realtime(input_path)
+    if not bronze_df.empty or (file_issues_df is not None and not file_issues_df.empty):
+        st.subheader("🔍 Duplicate & Invalid File Detail")
+        dup_df = build_validation_frame(bronze_df, silver_df, file_issues_df)
+        if dup_df.empty:
+            st.success("✅ No duplicate or invalid records found in the current dataset.")
+        else:
+            dup_count = len(dup_df[dup_df["Reason"].str.contains("Duplicate", na=False)])
+            st.markdown(
+                f"**{len(dup_df)} records flagged** — "
+                f"**{dup_count} duplicates**, "
+                f"**{len(dup_df) - dup_count} other issues**"
+            )
+            st.dataframe(dup_df, use_container_width=True, hide_index=True)
+
+    st.caption(f"⚡ Report auto-refreshes. Last generated: {generated_at}")
+
+
 
 
 def render_email_sidebar() -> None:
@@ -1241,7 +1558,7 @@ def render_email_sidebar() -> None:
                     raw_df       = _compute_gold_from_raw(input_path)
                     total_orders = int(raw_df["total_orders"].sum()) if not raw_df.empty else 0
 
-                    bronze_rt, silver_rt = _compute_medallion_realtime(input_path)
+                    bronze_rt, silver_rt, _ = _compute_medallion_realtime(input_path)
                     duplicates = max(0, len(bronze_rt) - len(silver_rt)) if not bronze_rt.empty else 0
 
                     details = (
