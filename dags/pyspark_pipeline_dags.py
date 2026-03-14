@@ -63,16 +63,32 @@ SPARK_JOB_PATH   = os.environ.get(
 INPUT_FILE_GLOB  = os.environ.get("INPUT_FILE_GLOB", "/data/input/*")
 FS_CONN_ID       = os.environ.get("FS_CONN_ID", "fs_default")
 
-SPARK_SUBMIT_CMD = [
-    "/opt/spark/bin/spark-submit",
-    "--packages", "io.delta:delta-spark_2.12:3.2.0",
-    "--conf", "spark.jars.ivy=/tmp/.ivy2",
-    "--conf", "spark.sql.extensions=io.delta.sql.DeltaSparkSessionExtension",
-    "--conf", "spark.sql.catalog.spark_catalog=org.apache.spark.sql.delta.catalog.DeltaCatalog",
-]
-
+from airflow.exceptions import AirflowFailException
 
 # ── Task callables ─────────────────────────────────────────────────────────────
+def validate_input_files(**context):
+    """Gatekeeper task: Fails fast if non-CSV files are in the input directory."""
+    import glob
+    ti = context["ti"]
+    # Adjust for local vs docker path if needed - using glob from env but stripping *
+    input_path = os.environ.get("INPUT_FILE_GLOB", "/data/input/").replace("*", "")
+    
+    # We resolve the absolute path relative to project root if it is a relative path in env
+    if not os.path.isabs(input_path):
+        input_path = os.path.join(PROJECT_ROOT, input_path.lstrip("/"))
+
+    files = glob.glob(os.path.join(input_path, "*"))
+    for file_path in files:
+        if os.path.isdir(file_path):
+            continue
+        if not file_path.lower().endswith('.csv'):
+            error_msg = f"CRITICAL: Unsupported file format detected: {os.path.basename(file_path)}. Only .csv allowed."
+            ti.log.error(error_msg)
+            raise AirflowFailException(error_msg)
+            
+    ti.log.info("All files validated successfully as .csv")
+
+
 def log_pipeline_start(**context) -> None:
     dag_id = context["dag"].dag_id
     run_id = context["run_id"]
@@ -334,6 +350,12 @@ with DAG(
         python_callable = log_pipeline_start,
     )
 
+    e_validate = PythonOperator(
+        task_id             = "validate_input_files",
+        python_callable     = validate_input_files,
+        on_failure_callback = on_task_failure, # Immediately sends the email!
+    )
+
     e_spark = PythonOperator(
         task_id             = "run_process_data",
         python_callable     = _run_spark_job,
@@ -346,4 +368,4 @@ with DAG(
         trigger_rule    = "all_done",
     )
 
-    e_sensor >> e_start >> e_spark >> e_finish
+    e_sensor >> e_start >> e_validate >> e_spark >> e_finish
