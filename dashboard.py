@@ -96,6 +96,7 @@ def create_spark_session() -> SparkSession:
         .config("spark.sql.catalog.spark_catalog", "org.apache.spark.sql.delta.catalog.DeltaCatalog")
         .config("spark.jars.ivy", os.path.join(os.getcwd(), ".ivy2"))
         .config("spark.driver.extraJavaOptions", "-Djava.net.preferIPv4Stack=true")
+        .config("spark.databricks.delta.snapshotPartitions", "1")
     )
 
     # Ensure Spark picks the same Python interpreter as Streamlit.
@@ -105,163 +106,22 @@ def create_spark_session() -> SparkSession:
     return configure_spark_with_delta_pip(builder).getOrCreate()
 
 
-def _compute_medallion_realtime(input_path: str) -> tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame]:
-    """Computes real-time Bronze, Silver, and File Issues views from raw input files."""
+def _read_input_files(input_path: str) -> tuple[pd.DataFrame, list[dict], int]:
+    """Reads all CSV/JSON files and returns a unified DataFrame + list of issues."""
     import glob
     all_files = glob.glob(os.path.join(input_path, "*"))
-    if not all_files:
-        return pd.DataFrame(), pd.DataFrame(), pd.DataFrame()
-
+    total_files = len(all_files)
+    
     dfs = []
-    file_issues = []
+    issues = []
     
     for f in all_files:
         filename = os.path.basename(f)
         extension = Path(f).suffix.lower()
-        
-        # ── 1. Check for Supported File Extension (.csv or .json) ──
         if extension not in ['.csv', '.json']:
-            file_issues.append({
-                "order_id": "N/A",
-                "source_file": filename,
-                "Reason": f"Unsupported File Format: File extension '{extension}' is not supported. Use .csv or .json only.",
-                "order_date": "N/A",
-                "product": "N/A"
-            })
+            issues.append({"order_id": "N/A", "source_file": filename, "Reason": f"Unsupported Format: {extension}"})
             continue
 
-        try:
-            temp_df = pd.DataFrame()
-            
-            # ── 2. Handle JSON Format ──
-            if extension == '.json':
-                try:
-                    temp_df = pd.read_json(f)
-                    # If it's a single object, wrap it in a list
-                    if isinstance(temp_df, pd.Series):
-                        temp_df = temp_df.to_frame().T
-                except Exception as e:
-                    file_issues.append({
-                        "order_id": "CRITICAL",
-                        "source_file": filename,
-                        "Reason": f"Corrupted JSON: File could not be parsed. Error: {str(e)}",
-                        "order_date": "N/A",
-                        "product": "N/A"
-                    })
-                    continue
-
-            # ── 3. Handle CSV Format ──
-            else:
-                try:
-                    import csv
-                    with open(f, 'r', encoding='utf-8-sig') as file:
-                        reader = csv.reader(file)
-                        data = list(reader)
-                        
-                    if not data: 
-                        file_issues.append({
-                            "order_id": "EMPTY",
-                            "source_file": filename,
-                            "Reason": "Corrupted Data: File is empty or has no rows.",
-                            "order_date": "N/A",
-                            "product": "N/A"
-                        })
-                        continue
-                    
-                    first_row = data[0]
-                    header_keywords = ["id", "order", "date", "revenue", "product", "amount"]
-                    has_header = any(any(key in str(col).lower() for key in header_keywords) for col in first_row)
-                    
-                    temp_df = pd.DataFrame(data)
-                    if has_header:
-                        num_cols = len(first_row)
-                        temp_df = temp_df.iloc[:, :num_cols]
-                        temp_df.columns = first_row
-                        temp_df = temp_df.iloc[1:].reset_index(drop=True)
-                    else:
-                        canonical = ["order_id", "order_date", "product", "revenue"]
-                        if len(first_row) < 2:
-                            raise ValueError(f"Inconsistent columns: Expected at least 2 (order_id, order_date), found {len(first_row)}")
-                        num_cols = len(canonical)
-                        temp_df = temp_df.iloc[:, :num_cols]
-                        actual_cols = temp_df.shape[1]
-                        temp_df.columns = canonical[:actual_cols]
-                except Exception as e:
-                    file_issues.append({
-                        "order_id": "PARSE_ERROR",
-                        "source_file": filename,
-                        "Reason": f"Corrupted CSV: {str(e)}",
-                        "order_date": "N/A",
-                        "product": "N/A"
-                    })
-                    continue
-
-            # ── 4. Structural Validation & Normalization ──
-            if temp_df.empty:
-                continue
-
-            # Normalize and deduplicate headers
-            temp_df.columns = [str(c).strip().lower() for c in temp_df.columns]
-            temp_df = temp_df.loc[:, ~temp_df.columns.duplicated(keep="first")]
-
-            rename_map = {
-                "product_name": "product",
-                "date": "order_date",
-                "event_timestamp": "order_date",
-                "id": "order_id",
-                "name": "product"
-            }
-            temp_df.rename(columns=rename_map, inplace=True)
-
-            if "order_id" not in temp_df.columns or "order_date" not in temp_df.columns:
-                file_issues.append({
-                    "order_id": "SCHEMA_ERROR",
-                    "source_file": filename,
-                    "Reason": "Validation Failed: Missing required columns (order_id, order_date).",
-                    "order_date": "N/A",
-                    "product": "N/A"
-                })
-                continue
-            
-            temp_df["ingestion_timestamp"] = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
-            temp_df["source_file"] = filename
-            dfs.append(temp_df)
-        except Exception as e:
-            file_issues.append({
-                "order_id": "IO_ERROR",
-                "source_file": filename,
-                "Reason": f"Access Error: File could not be read. Error: {str(e)}",
-                "order_date": "N/A",
-                "product": "N/A"
-            })
-
-    file_issues_df = pd.DataFrame(file_issues)
-    if not dfs:
-        return pd.DataFrame(), pd.DataFrame(), file_issues_df
-
-    bronze_rt = pd.concat(dfs, ignore_index=True, sort=False)
-
-    # Silver is the Cleaned version: Deduplicated on order_id
-    dedupe_cols = [c for c in ["order_id", "order_date"] if c in bronze_rt.columns]
-    silver_rt = bronze_rt.drop_duplicates(subset=dedupe_cols or None, keep="first").copy()
-    silver_rt["processing_timestamp"] = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
-    
-    return bronze_rt, silver_rt, file_issues_df
-
-
-def _compute_gold_from_raw(input_path: str) -> pd.DataFrame:
-    """Replicates Spark Gold logic in-memory for instant feedback, supporting CSV and JSON."""
-    import glob
-    all_files = glob.glob(os.path.join(input_path, "*"))
-    if not all_files:
-        return pd.DataFrame()
-
-    dfs = []
-    for f in all_files:
-        extension = Path(f).suffix.lower()
-        if extension not in ['.csv', '.json']:
-            continue
-            
         try:
             temp_df = pd.DataFrame()
             if extension == '.json':
@@ -273,119 +133,204 @@ def _compute_gold_from_raw(input_path: str) -> pd.DataFrame:
                 with open(f, 'r', encoding='utf-8-sig') as file:
                     reader = csv.reader(file)
                     data = list(reader)
-                if not data: continue
+                if not data:
+                    issues.append({"order_id": "N/A", "source_file": filename, "Reason": "Empty File"})
+                    continue
                 
+                # Check for header
                 first_row = data[0]
-                header_keywords = ["id", "order", "date", "revenue", "product", "amount"]
+                header_keywords = ["id", "order", "date", "revenue", "product", "amount", "name"]
                 has_header = any(any(key in str(col).lower() for key in header_keywords) for col in first_row)
                 
                 temp_df = pd.DataFrame(data)
                 if has_header:
-                    num_cols = len(first_row)
-                    temp_df = temp_df.iloc[:, :num_cols]
                     temp_df.columns = first_row
                     temp_df = temp_df.iloc[1:].reset_index(drop=True)
                 else:
-                    canonical = ["order_id", "customer_id", "product", "unit_price", "quantity", "order_date"]
-                    num_cols = len(canonical)
-                    temp_df = temp_df.iloc[:, :num_cols]
-                    actual_cols = temp_df.shape[1]
-                    temp_df.columns = canonical[:actual_cols]
-            
+                    canonical = ["order_id", "order_date", "product", "revenue", "unit_price", "quantity"]
+                    temp_df.columns = canonical[:temp_df.shape[1]]
+
             if temp_df.empty:
                 continue
 
-            # normalize columns for mapping
+            # Basic Validation
             temp_df.columns = [str(c).strip().lower() for c in temp_df.columns]
+            temp_df = temp_df.loc[:, ~temp_df.columns.duplicated(keep="first")]
             
-            # ID column mapping
+            rename_map = {
+                "product_name": "product", "date": "order_date", "event_timestamp": "order_date",
+                "id": "order_id", "name": "product", "amount": "revenue"
+            }
+            temp_df.rename(columns=rename_map, inplace=True)
+            
             if "order_id" not in temp_df.columns:
-                potential_id_cols = ["id", "order id", "orderid"]
-                found_id = next((c for c in potential_id_cols if c in temp_df.columns), None)
-                if found_id:
-                    temp_df.rename(columns={found_id: "order_id"}, inplace=True)
-                else:
-                    temp_df.rename(columns={temp_df.columns[0]: "order_id"}, inplace=True)
+                issues.append({"order_id": "N/A", "source_file": filename, "Reason": "Missing order_id column"})
+                continue
 
-            # Revenue mapping
-            if "revenue" not in temp_df.columns:
-                potential_rev_cols = ["amount", "price", "total", "revenue_value"]
-                found_rev = next((c for c in potential_rev_cols if c in temp_df.columns), None)
-                if found_rev:
-                    temp_df.rename(columns={found_rev: "revenue"}, inplace=True)
+            temp_df["source_file"] = filename
+            temp_df["ingestion_timestamp"] = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+            dfs.append(temp_df)
             
-            # Date mapping
-            if "order_date" not in temp_df.columns:
-                potential_date_cols = ["date", "event_timestamp", "timestamp"]
-                found_date = next((c for c in potential_date_cols if c in temp_df.columns), None)
-                if found_date:
-                    temp_df.rename(columns={found_date: "order_date"}, inplace=True)
-                else:
-                    date_col = None
-                    for col in temp_df.columns:
-                        if temp_df[col].astype(str).str.contains(r'\d{4}-\d{2}-\d{2}').any():
-                            date_col = col
-                            break
-                    if date_col:
-                        temp_df.rename(columns={date_col: "order_date"}, inplace=True)
+        except Exception as e:
+            err_msg = str(e)
+            issues.append({"order_id": "N/A", "source_file": filename, "Reason": f"Corruption: {err_msg[:50]}"})
 
-            cols_to_keep = ["order_id", "order_date"]
-            if "revenue" in temp_df.columns: cols_to_keep.append("revenue")
-            if "unit_price" in temp_df.columns: cols_to_keep.append("unit_price")
-            if "quantity" in temp_df.columns: cols_to_keep.append("quantity")
-            
-            dfs.append(temp_df[[c for c in cols_to_keep if c in temp_df.columns]])
-        except Exception:
-            continue
+    df_out = pd.concat(dfs, ignore_index=True, sort=False) if dfs else pd.DataFrame()
+    return df_out, issues, total_files
+
+
+def _harmonize_schema(df: pd.DataFrame) -> pd.DataFrame:
+    """Standardizes column names to ensure consistent validation and joins."""
+    if df.empty: return df
+    df.columns = [str(c).strip().lower() for c in df.columns]
+    mapping = {
+        "id": "order_id", "orderid": "order_id",
+        "name": "product", "product_name": "product",
+        "date": "order_date", "event_timestamp": "order_date",
+        "amount": "revenue", "price": "unit_price", "total_revenue": "revenue"
+    }
+    df = df.rename(columns=mapping)
+    # Keep only one occurrence if duplicates arise from renaming
+    df = df.loc[:, ~df.columns.duplicated(keep="first")]
+    return df
+
+def _compute_medallion_realtime(input_path: str) -> tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame, int]:
+    """Computes hybrid Bronze and Silver views by combining Delta tables and Input files."""
+    script_dir = Path(__file__).resolve().parent
+    bronze_path = script_dir / "data" / "bronze"
+    silver_path = script_dir / "data" / "silver"
+
+    # 1. Load Pending data from Input Folder
+    pending_df, file_issues, total_files = _read_input_files(input_path)
+    # ... logic continues ...
+    pending_df = _harmonize_schema(pending_df)
     
-    if not dfs:
-        return pd.DataFrame()
+    # 2. Load Processed data from Delta Tables
+    # ...
+    bronze_delta = pd.DataFrame()
+    if bronze_path.exists():
+        try: 
+            bronze_delta = load_delta_df(str(bronze_path))
+            bronze_delta = _harmonize_schema(bronze_delta)
+        except: pass
+
+    silver_delta = pd.DataFrame()
+    if silver_path.exists():
+        try: 
+            silver_delta = load_delta_df(str(silver_path))
+            silver_delta = _harmonize_schema(silver_delta)
+        except: pass
+
+    # 3. Combine Bronze (Raw) - Schema Aligned
+    if not pending_df.empty and not bronze_delta.empty:
+        bronze_rt = pd.concat([pending_df, bronze_delta], ignore_index=True, sort=False)
+    else:
+        bronze_rt = pending_df if not pending_df.empty else bronze_delta
+
+    # 4. Combine Silver (Clean) - Schema Aligned
+    if not pending_df.empty:
+        pending_silver = pending_df.copy()
+        if not pending_silver.empty:
+            pending_silver["processing_timestamp"] = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
         
-    raw_combined = pd.concat(dfs, ignore_index=True)
-    raw_combined["timestamp"] = pd.to_datetime(raw_combined.get("order_date", pd.Timestamp.now()), errors="coerce")
-    raw_combined.dropna(subset=["timestamp"], inplace=True)
-    raw_combined["date"] = raw_combined["timestamp"].dt.date
-    raw_combined = raw_combined.sort_values("timestamp", ascending=False).drop_duplicates(subset=["order_id"], keep="first")
+        if not silver_delta.empty:
+            silver_rt = pd.concat([pending_silver, silver_delta], ignore_index=True, sort=False)
+        else:
+            silver_rt = pending_silver
+    else:
+        silver_rt = silver_delta.copy()
 
-    gold_style = (
-        raw_combined.groupby("date")
+    # Apply strict Silver layer cleaning rules to ALL Silver data (pending + historical)
+    if not silver_rt.empty:
+        for req in ["order_id", "order_date"]:
+            if req not in silver_rt.columns:
+                silver_rt[req] = pd.NA
+        
+        silver_rt = silver_rt.dropna(subset=["order_id", "order_date"])
+        
+        for col in ["order_id", "order_date"]:
+            silver_rt = silver_rt[silver_rt[col].astype(str).str.strip() != ""]
+            silver_rt = silver_rt[silver_rt[col].astype(str).str.lower() != "nan"]
+            silver_rt = silver_rt[silver_rt[col].astype(str).str.lower().str.replace(" ", "") != "nat"]
+            
+        parsed_dates = pd.to_datetime(silver_rt["order_date"], errors="coerce")
+        valid_mask = parsed_dates.notna() & (parsed_dates <= (pd.Timestamp.now() + pd.Timedelta(days=1)))
+        silver_rt = silver_rt[valid_mask]
+            
+        for col in ["quantity", "unit_price", "revenue", "price"]:
+            if col in silver_rt.columns:
+                silver_rt[col] = pd.to_numeric(silver_rt[col], errors="coerce")
+                silver_rt = silver_rt[(silver_rt[col].isna()) | (silver_rt[col] >= 0)]
+                
+        silver_rt = silver_rt.drop_duplicates(subset=["order_id"], keep="first")
+
+    # Finalize issues DF with explicit columns to avoid KeyError: 'Reason'
+    issue_df = pd.DataFrame(file_issues, columns=["order_id", "source_file", "Reason"])
+    return bronze_rt, silver_rt, issue_df, total_files
+
+
+def _compute_gold_from_raw(input_path: str) -> pd.DataFrame:
+    """Unifies Gold Delta Table data with Real-time Input data for a 'Living' View."""
+    script_dir = Path(__file__).resolve().parent
+    gold_path = os.path.join(script_dir, "data", "gold")
+    
+    # 1. Load Pending data and transform to Gold Style
+    pending_raw, _, _ = _read_input_files(input_path)
+    pending_raw = _harmonize_schema(pending_raw)
+    pending_gold_style = pd.DataFrame()
+    
+    if not pending_raw.empty:
+        pending_raw["timestamp"] = pd.to_datetime(pending_raw.get("order_date", pd.Timestamp.now()), errors="coerce")
+        pending_raw.dropna(subset=["timestamp", "order_id"], inplace=True)
+        pending_raw["date"] = pending_raw["timestamp"].dt.date
+        
+        pending_gold_style = (
+            pending_raw.groupby("date")
+            .agg(
+                total_orders=("order_id", "nunique"),
+                last_processed=("timestamp", "max"),
+                order_ids=("order_id", lambda x: ", ".join(x.dropna().astype(str).unique()))
+            )
+            .reset_index()
+        )
+
+    # 2. Load Processed Gold Table
+    processed_gold = pd.DataFrame()
+    if os.path.exists(gold_path):
+        try:
+            processed_gold = load_gold_data(gold_path)
+            if not processed_gold.empty:
+                processed_gold["date"] = pd.to_datetime(processed_gold["date"]).dt.date
+                if "total_orders" not in processed_gold.columns and "total_orders_per_day" in processed_gold.columns:
+                    processed_gold.rename(columns={"total_orders_per_day": "total_orders"}, inplace=True)
+        except: pass
+
+    # 3. Combine and Re-Aggregate with Type Safety
+    if pending_gold_style.empty and processed_gold.empty:
+        return pd.DataFrame()
+    
+    combined = pd.concat([pending_gold_style, processed_gold], ignore_index=True)
+    combined["date"] = pd.to_datetime(combined["date"]).dt.date
+    
+    # Ensure last_processed is datetime objects (robust against max() errors)
+    combined["last_processed"] = pd.to_datetime(combined.get("last_processed", None), errors="coerce")
+    
+    def _merge_ids(x):
+        all_ids = ", ".join(x.dropna().astype(str)).split(",")
+        return ", ".join(sorted(list(set([s.strip() for s in all_ids if s.strip()]))))
+
+    final_gold = (
+        combined.groupby("date")
         .agg(
-            total_orders=("date", "count"),
-            last_processed=("timestamp", "max"),
-            order_ids=("order_id", lambda x: ", ".join(x.dropna().astype(str).unique()))
+            total_orders=("total_orders", "sum"),
+            last_processed=("last_processed", "max"),
+            order_ids=("order_ids", _merge_ids)
         )
         .reset_index()
     )
     
-    gold_style = gold_style[["date", "order_ids", "total_orders", "last_processed"]]
-    gold_style["last_processed"] = gold_style["last_processed"].dt.strftime('%Y-%m-%d %H:%M:%S')
-    return gold_style.sort_values("date")
-
-    # 3. Deduplicate (Crucial: Prevents double-counting in metrics)
-    raw_combined = raw_combined.sort_values("timestamp", ascending=False).drop_duplicates(subset=["order_id"], keep="first")
-
-    # 4. Aggregate (Match Gold Schema + New Order IDs column + Timestamp)
-    gold_style = (
-        raw_combined.groupby("date")
-        .agg(
-            total_orders=("date", "count"),
-            last_processed=("timestamp", "max"),
-            order_ids=("order_id", lambda x: ", ".join(x.dropna().astype(str).unique()))
-        )
-        .reset_index()
-    )
-    
-    # 4. Reorder columns: replace revenue with timestamp
-    cols = ["date", "order_ids", "total_orders", "last_processed"]
-    gold_style = gold_style[cols]
-    
-    # Format timestamp for better display
-    gold_style["last_processed"] = gold_style["last_processed"].dt.strftime('%Y-%m-%d %H:%M:%S')
-    
-    # Cast for performance and consistency
-    gold_style["total_orders"] = gold_style["total_orders"].astype("int32")
-    
-    return gold_style.sort_values("date")
+    final_gold["total_orders"] = final_gold["total_orders"].fillna(0).astype(int)
+    return final_gold.sort_values("date")
 
 
 def _normalize_gold_dataframe(raw_df: pd.DataFrame) -> pd.DataFrame:
@@ -407,18 +352,20 @@ def _normalize_gold_dataframe(raw_df: pd.DataFrame) -> pd.DataFrame:
             # Add missing columns with optimized defaults
             raw_df[new_col] = 0.0 if "revenue" in new_col else 0
 
-    # 2. Select only needed columns (this creates a slice, then we make it a standalone df)
-    final_cols = ["date", "total_orders", "total_revenue"]
-    df = raw_df[final_cols].copy() 
+    # 2. Select only needed columns
+    desired = ["date", "total_orders", "total_revenue", "last_processed", "order_ids"]
+    available = [c for c in desired if c in raw_df.columns]
+    df = raw_df[available].copy() 
 
     # 3. Optimized Type Casting
-    # Convert date efficiently
-    df["date"] = pd.to_datetime(df["date"], errors="coerce")
-    df.dropna(subset=["date"], inplace=True)
+    df["date"] = pd.to_datetime(df["date"], errors="coerce").dt.date
     
-    # Use smaller dtypes to save 50% memory on large numeric scales
-    df["total_orders"] = pd.to_numeric(df["total_orders"], errors="coerce").fillna(0).astype("int32")
-    df["total_revenue"] = pd.to_numeric(df["total_revenue"], errors="coerce").fillna(0.0).astype("float32")
+    if "total_orders" in df.columns:
+        df["total_orders"] = pd.to_numeric(df["total_orders"], errors="coerce").fillna(0).astype("int32")
+    if "total_revenue" in df.columns:
+        df["total_revenue"] = pd.to_numeric(df["total_revenue"], errors="coerce").fillna(0.0).astype("float32")
+    if "last_processed" in df.columns:
+        df["last_processed"] = pd.to_datetime(df["last_processed"], errors="coerce")
 
     return df.sort_values("date")
 
@@ -477,81 +424,229 @@ def inject_shared_styles() -> None:
     st.markdown(
         """
         <style>
-        [data-testid="stAppViewContainer"] { background-color: #0f172a; color: #e2e8f0; }
-        [data-testid="stHeader"] { background-color: rgba(15, 23, 42, 0.9); }
-        h1, h2, h3, h4, p, span, div { color: #e2e8f0 !important; }
-        .top-nav-wrap {
-            border-radius: 14px;
-            padding: 0.7rem 0.9rem;
-            margin-bottom: 0.8rem;
-            border: 1px solid rgba(14, 165, 233, 0.25);
-            background: linear-gradient(90deg, rgba(14,165,233,0.12), rgba(34,197,94,0.12));
+        /* Base Theme - Modern Clean Look */
+        [data-testid="stAppViewContainer"] { background-color: #0b0f19; color: #cbd5e1; font-family: 'Inter', -apple-system, sans-serif;}
+        [data-testid="stHeader"] { background-color: rgba(11, 15, 25, 0.8); backdrop-filter: blur(10px); }
+        
+        /* Typography overrides - Smaller and Cleaner */
+        h1, h2, h3, h4, p, div, span { color: #cbd5e1 !important; font-family: 'Inter', -apple-system, sans-serif; }
+        h1 { font-size: 1.8rem !important; font-weight: 600 !important; letter-spacing: -0.02em !important; text-align: center; margin-bottom: 0.5rem !important; color: #f8fafc !important; }
+        h2 { font-size: 1.35rem !important; font-weight: 500 !important; color: #f1f5f9 !important; }
+        h3 { font-size: 1.1rem !important; font-weight: 500 !important; color: #e2e8f0 !important; }
+        p, div { font-size: 0.9rem; }
+        
+        /* Metric Cards styling */
+        div[data-testid="metric-container"] {
+            background: rgba(30, 41, 59, 0.3);
+            border: 1px solid rgba(255, 255, 255, 0.04);
+            padding: 0.8rem 1rem;
+            border-radius: 12px;
+            transition: all 0.2s ease;
+        }
+        div[data-testid="metric-container"]:hover {
+            transform: translateY(-2px);
+            border-color: rgba(255, 255, 255, 0.1);
+            background: rgba(30, 41, 59, 0.5);
+            box-shadow: 0 4px 12px -2px rgba(0, 0, 0, 0.15);
+        }
+        div[data-testid="metric-container"] label { font-size: 0.8rem !important; color: #64748b !important; }
+        div[data-testid="metric-container"] div[data-testid="stMetricValue"] { font-size: 1.5rem !important; font-weight: 600 !important; color: #f8fafc !important; }
+
+        /* Top Navigation Navbar */
+        div[row-widget="stRadio"] { display: flex; justify-content: center; }
+        div[data-testid="stRadio"] {
+            display: flex !important;
+            justify-content: center !important; /* Center horizontally */
+            align-items: center !important;
+            width: 100% !important;
+            margin: 0 auto !important;
+            text-align: center !important;
+            margin-bottom: 2rem;
+            margin-top: 1rem;
+        }
+        div[data-testid="stRadio"] > div[role="radiogroup"] {
+            margin: 0 auto !important;
+            display: flex !important;
+            justify-content: center !important;
+        }
+        div[role="radiogroup"] {
+            flex-direction: row;
+            background: rgba(15, 23, 42, 0.6);
+            padding: 0.25rem;
+            border-radius: 9999px; /* Capsule shape */
+            border: 1px solid rgba(255, 255, 255, 0.06);
+            gap: 0.25rem;
+            box-shadow: 0 4px 12px -2px rgba(0, 0, 0, 0.2);
+            display: inline-flex !important;
+            margin: 0 auto !important;
+            backdrop-filter: blur(10px);
+        }
+        
+        /* Hide the radio circles */
+        div[role="radiogroup"] label > div:first-child {
+            display: none !important;
+        }
+        
+        /* Style the labels as navbar items */
+        div[role="radiogroup"] label {
+            padding: 0.35rem 1.2rem !important;
+            border-radius: 9999px !important; /* Capsule shape */
+            background: transparent !important;
+            cursor: pointer;
+            transition: all 0.2s ease;
+            margin: 0 !important;
+        }
+        div[role="radiogroup"] label p {
+            color: #94a3b8 !important;
+            font-weight: 500 !important;
+            font-size: 0.85rem !important;
+            margin: 0 !important;
+        }
+        
+        div[role="radiogroup"] label:hover {
+            background: rgba(255, 255, 255, 0.05) !important;
+        }
+        div[role="radiogroup"] label:hover p {
+            color: #cbd5e1 !important;
+        }
+        
+        /* Active/Checked state */
+        div[role="radiogroup"] label:has(input:checked) {
+            background: rgba(255, 255, 255, 0.1) !important;
+            box-shadow: 0 1px 2px rgba(0, 0, 0, 0.2);
+        }
+        div[role="radiogroup"] label:has(input:checked) p {
+            color: #ffffff !important;
         }
 
+        /* Flow Cards (Medallion Flow) - Animated Border */
         .flow-card {
             position: relative;
-            border-radius: 18px;
-            padding: 1rem 1rem 0.8rem 1rem;
-            margin: 0.7rem 0 1rem 0;
-            background: rgba(30, 41, 59, 0.75);
-            border: 1px solid rgba(148, 163, 184, 0.35);
+            border-radius: 12px;
+            padding: 1.2rem;
+            margin: 1rem 0 1.2rem 0;
+            background: rgba(15, 23, 42, 0.4);
             overflow: hidden;
-            isolation: isolate;
+            z-index: 1;
+            transition: transform 0.3s ease;
         }
-
+        .flow-card:hover {
+            transform: translateY(-2px);
+        }
         .flow-card::before {
             content: "";
             position: absolute;
-            inset: -2px;
-            border-radius: 18px;
-            background: conic-gradient(
-                from var(--angle),
-                transparent 0deg,
-                transparent 220deg,
-                var(--line-color) 300deg,
-                transparent 360deg
-            );
-            animation: edge-run 3.2s linear infinite;
-            z-index: -1;
+            top: -50%;
+            left: -50%;
+            width: 200%;
+            height: 200%;
+            background: conic-gradient(transparent, transparent, var(--border-glow, #38bdf8));
+            animation: border-spin 4s linear infinite;
+            z-index: -2;
+            opacity: 0.8;
         }
-
+        .flow-card:hover::before {
+            opacity: 1;
+            animation-duration: 2s;
+        }
         .flow-card::after {
             content: "";
             position: absolute;
-            inset: 1px;
-            border-radius: 16px;
-            background: rgba(30, 41, 59, 0.85);
+            inset: 2.5px;
+            background: #0f172a;
+            border-radius: 10px;
             z-index: -1;
         }
-
-        .bronze { --line-color: #c27b43; }
-        .validation { --line-color: #ef4444; }
-        .silver { --line-color: #94a3b8; }
-
-        @property --angle {
-            syntax: '<angle>';
-            inherits: false;
-            initial-value: 0deg;
+        @keyframes border-spin {
+            100% { transform: rotate(360deg); }
         }
-
-        @keyframes edge-run {
-            from { --angle: 0deg; }
-            to { --angle: 360deg; }
+        
+        .bronze { --border-glow: #d97706; }
+        .validation { --border-glow: #ef4444; }
+        .silver { --border-glow: #94a3b8; }
+        
+        /* Buttons hover effect */
+        .stButton>button {
+            transition: all 0.2s ease !important;
+            border-radius: 6px;
+            font-size: 0.85rem !important;
+            font-weight: 500 !important;
+        }
+        
+        /* Dataframes subtle hover */
+        [data-testid="stDataFrame"] {
+            border-radius: 8px;
+            overflow: hidden;
+            border: 1px solid rgba(255, 255, 255, 0.05);
+        }
+        
+        /* Refresh Button Custom Gradient */
+        button[kind="primary"] {
+            background: linear-gradient(135deg, rgba(14,165,233,0.85), rgba(34,197,94,0.85)) !important;
+            border: none !important;
+            color: white !important;
+        }
+        button[kind="primary"]:hover {
+            background: linear-gradient(135deg, rgba(14,165,233,1), rgba(34,197,94,1)) !important;
+            box-shadow: 0 4px 12px rgba(34,197,94, 0.4) !important;
+            transform: translateY(-2px);
+        }
+        
+        /* Expander hover */
+        [data-testid="stExpander"] {
+            border-radius: 8px !important;
+            border: 1px solid rgba(255,255,255,0.05) !important;
+            background: rgba(15,23,42,0.3) !important;
+        }
+        [data-testid="stExpander"]:hover {
+            border-color: rgba(255,255,255,0.1) !important;
+        }
+        div[data-testid="stExpander"] div[role="button"] p {
+            font-size: 0.85rem !important;
+            font-weight: 500 !important;
+            color: #cbd5e1 !important;
         }
         </style>
+
+        <script>
+        // Global Auto-refresh mechanism (Triggers every 15 seconds)
+        if (!window.globalRefreshIntervalSet) {
+            window.globalRefreshIntervalSet = true;
+            setInterval(function() {
+                const refreshBtn = window.parent.document.querySelectorAll('button[kind="secondary"]');
+                let foundRefresh = false;
+                for (let btn of refreshBtn) {
+                    if (btn.innerText.includes("Refresh Now")) {
+                        btn.click();
+                        foundRefresh = true;
+                        break;
+                    }
+                }
+                if (!foundRefresh) {
+                    window.location.reload();
+                }
+            }, 15000); 
+        }
+        </script>
         """,
         unsafe_allow_html=True,
     )
 
 
 def render_top_nav() -> str:
-    st.markdown('<div class="top-nav-wrap"><strong>Navigation</strong></div>', unsafe_allow_html=True)
-    return st.radio(
-        "Select view",
-        ["Dashboard", "Bronze -> Validation -> Silver", "Quality Report"],
-        horizontal=True,
-        label_visibility="collapsed",
-    )
+    # Offset columns to push the navbar towards the right side
+    _, center_col, _ = st.columns([2.5, 5, 0.5])
+    with center_col:
+        # We wrap in a generic div to force the contents completely to center
+        st.markdown("<div style='display: flex; justify-content: center; width: 100%;'>", unsafe_allow_html=True)
+        nav_selection = st.radio(
+            "Navigation",
+            ["Dashboard", "Bronze -> Validation -> Silver", "Quality Report"],
+            horizontal=True,
+            label_visibility="collapsed",
+        )
+        st.markdown("</div>", unsafe_allow_html=True)
+        return nav_selection
 
 
 @st.cache_data(ttl=20, show_spinner=False)
@@ -711,7 +806,7 @@ def render_medallion_section() -> None:
     input_path = script_dir / "data" / "input"
 
     # HYBRID ENGINE: Load real-time data first to avoid "Empty" errors
-    rt_bronze, rt_silver, file_issues_df = _compute_medallion_realtime(str(input_path))
+    rt_bronze, rt_silver, file_issues_df, _ = _compute_medallion_realtime(str(input_path))
 
     # Try loading Delta Histories if they exist (for the ACID part)
     bronze_history = pd.DataFrame()
@@ -963,38 +1058,58 @@ def render_time_travel_demo() -> None:
         st.caption(f"Waiting for history logs... ({str(e)[:50]})")
 
 
+@st.cache_data(ttl=1)
+def load_delta_df(path: str) -> pd.DataFrame:
+    """Generic loader for any Delta lake table."""
+    try:
+        from deltalake import DeltaTable
+        return DeltaTable(path).to_pandas()
+    except:
+        try:
+            spark = create_spark_session()
+            return spark.read.format("delta").load(path).toPandas()
+        except:
+            return pd.DataFrame()
+
+
 def render_dashboard_home() -> None:
     st.title("Data Pipeline Analytics Dashboard")
 
-    top_col1, top_col2 = st.columns([6, 1])
-    with top_col2:
-        if st.button("🔄 Refresh Now"):
+    # Center the refresh button explicitly
+    _, center_btn_col, _ = st.columns([4, 2, 4])
+    with center_btn_col:
+        if st.button("🔄 Refresh Now", use_container_width=True, type="primary"):
             st.cache_data.clear()
             if "engine_notified" in st.session_state:
                 del st.session_state["engine_notified"]
+            import time
+            st.toast("✅ Dashboard synced successfully!", icon="✅")
+            time.sleep(0.6)
             st.rerun()
 
-    # Ultra-fast auto-refresh: every 1 second
-    st.markdown(
-        """
+    # System Heartbeat in Sidebar
+    st.sidebar.markdown("---")
+    st.sidebar.markdown(f"**💓 System Heartbeat**")
+    st.sidebar.caption(f"Last UI Signal: {datetime.now().strftime('%H:%M:%S')}")
+
+    # Inject ultra-responsive auto-refresh for Home ONLY
+    st.markdown("""
         <script>
-        if (!window.refreshIntervalSet) {
-            window.refreshIntervalSet = true;
+        if (!window.homeRefreshSet) {
+            window.homeRefreshSet = true;
             setInterval(function() {
-                window.location.reload();
-            }, 1000);
+                const btn = window.parent.document.querySelector('button[kind="secondary"]');
+                if (btn && btn.innerText.includes("Refresh Now")) btn.click();
+            }, 5000);
         }
         </script>
-        """,
-        unsafe_allow_html=True,
-    )
-
-    script_dir = os.path.dirname(os.path.abspath(__file__))
-    gold_path = os.path.join(script_dir, "data", "gold")
-
-    raw_input_path = os.path.join(script_dir, "data", "input")
+    """, unsafe_allow_html=True)
     
     # PERFORMANCE BOOST: Use Hybrid Real-time View
+    script_dir = os.path.dirname(os.path.abspath(__file__))
+    gold_path = os.path.join(script_dir, "data", "gold")
+    raw_input_path = os.path.join(script_dir, "data", "input")
+    
     # We calculate the Gold dataset directly from raw files in memory for 0-latency feedback
     gold_df = _compute_gold_from_raw(raw_input_path)
     
@@ -1014,13 +1129,17 @@ def render_dashboard_home() -> None:
     min_date = unique_dates[0]
     max_date = unique_dates[-1]
     
-    # Let user select a date range
-    selected_dates = st.date_input(
-        "Select Date Range (Simulates reading specific partition folders):",
-        value=(min_date, max_date),
-        min_value=min_date,
-        max_value=max_date
-    )
+    # Clean Partition Date Range UI
+    st.markdown("<p style='font-size:1.0rem; font-weight:500; color:#e2e8f0; margin-bottom:0.2rem;'>📅 Partition Explorer (Simulate Pruning)</p>", unsafe_allow_html=True)
+    date_col, _ = st.columns([1.5, 3])
+    with date_col:
+        selected_dates = st.date_input(
+            "Range",
+            value=(min_date, max_date),
+            min_value=min_date,
+            max_value=max_date,
+            label_visibility="collapsed"
+        )
     
     # Handle single date vs date range selection gracefully
     if isinstance(selected_dates, tuple) and len(selected_dates) == 2:
@@ -1032,40 +1151,40 @@ def render_dashboard_home() -> None:
         
     filtered_df = gold_df[(gold_df["date"] >= start_date) & (gold_df["date"] <= end_date)]
 
-    if "engine_notified" not in st.session_state:
-        st.toast("⚡ **Ultra-Fast Real-Time Engine Active**", icon="🚀")
-        st.session_state["engine_notified"] = True
-
+    # Calculate metrics for the filtered view
     total_orders = int(filtered_df["total_orders"].sum())
-    
-    # Calculate partition metrics
     partitions_scanned = sum(1 for d in unique_dates if start_date <= d <= end_date)
     total_partitions = len(unique_dates)
     scan_percentage = (partitions_scanned / total_partitions) * 100 if total_partitions > 0 else 0
 
     st.markdown("---")
-    colA, colB = st.columns([1, 2])
+    
+    # Calculate global metrics
+    global_total = int(gold_df["total_orders"].sum())
+    # Format the max timestamp for clean display
+    raw_max = gold_df["last_processed"].max()
+    latest_ts = raw_max.strftime('%Y-%m-%d %H:%M:%S') if pd.notnull(raw_max) else "N/A"
+    
+    colA, colB, colC = st.columns([1.5, 1.5, 3])
     with colA:
-        st.metric("Total Living Orders (Filtered)", f"{total_orders:,}")
+        st.metric("Total Living Orders (Overall)", f"{global_total:,}", help="Sum of processed Delta data and pending Input files.")
     with colB:
+        st.metric("Filtered Orders", f"{total_orders:,}", delta=f"{total_orders - global_total}" if total_orders < global_total else None)
+    with colC:
         # Data Partitioning Div (Visual representation of pruning effect)
         st.markdown(f"""
-            <div style='background: rgba(15, 23, 42, 0.4); padding: 15px; border-radius: 10px; border: 1px solid #1e293b; display: flex; align-items: center; gap: 20px;'>
+            <div style='background: rgba(15, 23, 42, 0.4); padding: 12px 15px; border-radius: 10px; border: 1px solid #1e293b; display: flex; align-items: center; gap: 15px;'>
                 <div style='flex: 1;'>
-                    <div style='display: flex; justify-content: space-between; margin-bottom: 5px;'>
-                        <span style='color: #64748b; font-size: 0.8rem;'>Partition Scans</span>
-                        <span style='color: #38bdf8; font-size: 0.8rem; font-weight: bold;'>{100-scan_percentage:.0f}% Savings</span>
+                    <div style='display: flex; justify-content: space-between; margin-bottom: 4px;'>
+                        <span style='color: #64748b; font-size: 0.75rem;'>Partition Efficiency</span>
+                        <span style='color: #38bdf8; font-size: 0.75rem; font-weight: bold;'>{100-scan_percentage:.0f}% Savings</span>
                     </div>
-                    <div style='background: #334155; height: 6px; border-radius: 3px; overflow: hidden;'>
-                        <div style='width: {scan_percentage}%; background: #38bdf8; height: 100%; box-shadow: 0 0 8px rgba(56, 189, 248, 0.4);'></div>
+                    <div style='background: #334155; height: 5px; border-radius: 3px; overflow: hidden;'>
+                        <div style='width: {scan_percentage}%; background: #38bdf8; height: 100%;'></div>
                     </div>
-                    <div style='margin-top: 8px; color: #94a3b8; font-size: 0.75rem;'>
-                        Querying <b>{partitions_scanned}</b> / {total_partitions} partition folders
+                    <div style='margin-top: 6px; color: #94a3b8; font-size: 0.7rem;'>
+                        Latest Sync Discovery: <span style='color: #e2e8f0;'>{latest_ts}</span>
                     </div>
-                </div>
-                <div style='text-align: center; border-left: 1px solid #334155; padding-left: 20px;'>
-                    <div style='color: #22c55e; font-size: 0.7rem; font-weight: bold; margin-bottom: 2px;'>PRUNING STATUS</div>
-                    <div style='color: #e2e8f0; font-size: 1.1rem; font-weight: 800;'>{"PASS" if scan_percentage < 100 else "ACTIVE"}</div>
                 </div>
             </div>
         """, unsafe_allow_html=True)
@@ -1102,7 +1221,7 @@ def render_dashboard_home() -> None:
             try:
                 # To simulate the Medallion funnel: we'll get real-time raw counts vs accepted silver counts
                 raw_input = os.path.join(os.path.dirname(os.path.abspath(__file__)), "data", "input")
-                rt_bronze, rt_silver, _ = _compute_medallion_realtime(raw_input)
+                rt_bronze, rt_silver, _, _ = _compute_medallion_realtime(raw_input)
                 
                 bronze_count = len(rt_bronze)
                 silver_count = len(rt_silver)
@@ -1119,7 +1238,7 @@ def render_dashboard_home() -> None:
                     
                 fig_donut = px.pie(status_data, values='count', names='status', hole=0.6, 
                                  color_discrete_sequence=['#475569', '#ef4444', '#3b82f6'])
-                fig_donut.update_layout(**chart_config, margin=dict(l=0, r=0, b=0, t=10), showlegend=False)
+                fig_donut.update_layout(**chart_config, margin=dict(l=0, r=0, b=0, t=10), showlegend=False, height=350)
                 fig_donut.update_traces(textposition='inside', textinfo='percent+label')
                 st.plotly_chart(fig_donut, use_container_width=True)
             except Exception:
@@ -1211,7 +1330,7 @@ def render_dashboard_home() -> None:
                 xaxis=dict(title='', tickfont=dict(color='#94a3b8', size=13), gridcolor='rgba(0,0,0,0)'),
                 yaxis=dict(title='', gridcolor='#1e293b', tickfont=dict(color='#94a3b8')),
                 bargroupgap=0.3,
-                height=260,
+                height=350,
             )
             st.plotly_chart(fig_bar, use_container_width=True)
             
@@ -1245,39 +1364,35 @@ def render_dashboard_home() -> None:
     st.caption(f"Last heartbeat at {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
 
 
-def _run_live_quality_checks(bronze_df: pd.DataFrame, silver_df: pd.DataFrame, file_issues_df: pd.DataFrame = None) -> dict:
-    """
-    Run all data quality checks live against the current Bronze DataFrame.
-    Returns a report dict structured identically to what quality_report.json used to provide,
-    so the rendering logic below is reusable for both sources.
-    """
+def _run_live_quality_checks(bronze_df: pd.DataFrame, silver_df: pd.DataFrame, file_issues_df: pd.DataFrame = None, total_files: int = 0) -> dict:
+    # ... (omitted parts for brevity)
     now_str = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
     layers_out = []
 
     # ── 0. Input Folder Integrity ───────────────────────────────────────────
     file_checks = []
-    file_count = 0
+    
     if file_issues_df is not None:
-        file_count = len(file_issues_df)
         unsupported = file_issues_df[file_issues_df["Reason"].str.contains("Unsupported", na=False)]
         corrupted = file_issues_df[file_issues_df["Reason"].str.contains("Corrupted", na=False)]
+        missing_id = file_issues_df[file_issues_df["Reason"].str.contains("Missing", na=False)]
         
         file_checks.append({
             "name": "File Formats",
             "status": "PASS" if unsupported.empty else "WARNING",
-            "message": "All files use supported .csv format." if unsupported.empty 
+            "message": "All files use supported .csv/.json format." if unsupported.empty 
                        else f"{len(unsupported)} file(s) follow unsupported formats."
         })
         file_checks.append({
-            "name": "Data Integrity",
-            "status": "PASS" if corrupted.empty else "CRITICAL",
-            "message": "No corrupted CSVs detected." if corrupted.empty 
-                       else f"{len(corrupted)} corrupted file(s) found in input folder."
+            "name": "Schema Integrity",
+            "status": "PASS" if corrupted.empty and missing_id.empty else "CRITICAL",
+            "message": "No corrupted files or missing ID columns detected." if corrupted.empty and missing_id.empty
+                       else f"{len(corrupted)} corrupted / {len(missing_id)} invalid layout files detected."
         })
 
     layers_out.append({
         "layer": "input",
-        "row_count": file_count,
+        "row_count": total_files,
         "columns": ["file_name", "reason"],
         "checks": file_checks,
         "critical_failures": sum(1 for c in file_checks if c["status"] == "CRITICAL"),
@@ -1291,26 +1406,37 @@ def _run_live_quality_checks(bronze_df: pd.DataFrame, silver_df: pd.DataFrame, f
         cols_present = list(df.columns)
 
         # ── 1. Row Count check ─────────────────────────────────────────────
+        is_empty = (row_count == 0)
         checks.append({
-            "name":    "Row Count",
-            "status":  "PASS" if row_count > 0 else "CRITICAL",
-            "message": f"{row_count:,} rows found." if row_count > 0 else "Table is empty — no data loaded.",
+            "name":    "Data Availability",
+            "status":  "PASS" if not is_empty else "INFO",
+            "message": f"Dataset contains {row_count:,} records." if not is_empty else f"Layer '{layer_name}' is currently empty (pending first sync).",
         })
 
         # ── 2. Schema / required columns ──────────────────────────────────
         required = ["order_id", "order_date"]
         missing_cols = [c for c in required if c not in df.columns]
+        
+        # We only fail schema if there's data but columns are missing, or if it's the Input layer
+        schema_status = "PASS"
+        if missing_cols:
+            if not is_empty and layer_name == "silver":
+                schema_status = "CRITICAL"
+            else:
+                schema_status = "INFO" if layer_name == "bronze" else "WARN"
+
         checks.append({
             "name":    "Required Columns Present",
-            "status":  "PASS" if not missing_cols else "CRITICAL",
-            "message": "All required columns found." if not missing_cols
-                       else f"Missing columns: {', '.join(missing_cols)}",
+            "status":  schema_status,
+            "message": f"Found {len(cols_present)} columns." if not missing_cols
+                       else f"Columns missing: {', '.join(missing_cols)}",
         })
 
-        if df.empty:
+        if is_empty:
+            summary_status = "WARN" if layer_name == "input" else "PASS"
             layers_out.append({
                 "layer": layer_name, "row_count": 0, "columns": cols_present,
-                "checks": checks, "critical_failures": 1, "warnings": 0, "status": "FAIL",
+                "checks": checks, "critical_failures": 0, "warnings": 1 if layer_name=="input" else 0, "status": summary_status,
             })
             continue
 
@@ -1320,9 +1446,10 @@ def _run_live_quality_checks(bronze_df: pd.DataFrame, silver_df: pd.DataFrame, f
             dup_ids   = df.loc[df.duplicated(subset=["order_id"], keep=False), "order_id"].unique().tolist()
             sample    = ", ".join(str(x) for x in dup_ids[:5])
             suffix    = f" … and {len(dup_ids)-5} more" if len(dup_ids) > 5 else ""
+            dup_status = "PASS" if dup_count == 0 else ("INFO" if layer_name == "bronze" else "WARNING")
             checks.append({
                 "name":    "No Duplicate Order IDs",
-                "status":  "PASS" if dup_count == 0 else "WARNING",
+                "status":  dup_status,
                 "message": f"No duplicates found." if dup_count == 0
                            else f"{dup_count} duplicate rows for IDs: {sample}{suffix}",
             })
@@ -1334,9 +1461,11 @@ def _run_live_quality_checks(bronze_df: pd.DataFrame, silver_df: pd.DataFrame, f
                 n = int(df[col].isna().sum()) + int((df[col].astype(str).str.strip() == "").sum())
                 if n:
                     null_report.append(f"{col}: {n} null/empty")
+        
+        null_status = "PASS" if not null_report else ("INFO" if layer_name == "bronze" else "CRITICAL")
         checks.append({
             "name":    "No Null Critical Fields",
-            "status":  "PASS" if not null_report else "CRITICAL",
+            "status":  null_status,
             "message": "All critical fields populated." if not null_report
                        else " | ".join(null_report),
         })
@@ -1348,9 +1477,11 @@ def _run_live_quality_checks(bronze_df: pd.DataFrame, silver_df: pd.DataFrame, f
                 neg = int((pd.to_numeric(df[col], errors="coerce").fillna(0) < 0).sum())
                 if neg:
                     neg_issues.append(f"{col}: {neg} negative value(s)")
+        
+        neg_status = "PASS" if not neg_issues else ("INFO" if layer_name == "bronze" else "WARNING")
         checks.append({
             "name":    "No Negative Numeric Values",
-            "status":  "PASS" if not neg_issues else "WARNING",
+            "status":  neg_status,
             "message": "All numeric values are non-negative." if not neg_issues
                        else " | ".join(neg_issues),
         })
@@ -1359,18 +1490,20 @@ def _run_live_quality_checks(bronze_df: pd.DataFrame, silver_df: pd.DataFrame, f
         if "order_date" in df.columns:
             parsed = pd.to_datetime(df["order_date"], errors="coerce")
             bad_dates = int(parsed.isna().sum())
+            date_status = "PASS" if bad_dates == 0 else ("INFO" if layer_name == "bronze" else "WARNING")
             checks.append({
                 "name":    "Valid Date Format",
-                "status":  "PASS" if bad_dates == 0 else "WARNING",
+                "status":  date_status,
                 "message": "All dates parse correctly." if bad_dates == 0
                            else f"{bad_dates} row(s) have unparsable dates.",
             })
 
             # ── 7. Future dates ───────────────────────────────────────────
             future = int((parsed > pd.Timestamp.now() + pd.Timedelta(days=1)).sum())
+            future_status = "PASS" if future == 0 else ("INFO" if layer_name == "bronze" else "WARNING")
             checks.append({
                 "name":    "No Future Dates",
-                "status":  "PASS" if future == 0 else "WARNING",
+                "status":  future_status,
                 "message": "No future dates detected." if future == 0
                            else f"{future} row(s) have dates set in the future.",
             })
@@ -1412,47 +1545,23 @@ def _run_live_quality_checks(bronze_df: pd.DataFrame, silver_df: pd.DataFrame, f
     }
 
 
-@st.cache_data(ttl=2, show_spinner=False)
-def _cached_quality_report(input_path: str) -> dict:
-    """Cached wrapper so the report recalculates at most every 2 seconds."""
-    bronze_df, silver_rt, file_issues_df = _compute_medallion_realtime(input_path)
-    return _run_live_quality_checks(bronze_df, silver_rt, file_issues_df)
+def _live_quality_report(input_path: str) -> dict:
+    """Calculates live quality report with zero latency."""
+    bronze_df, silver_rt, file_issues_df, total_files = _compute_medallion_realtime(input_path)
+    return _run_live_quality_checks(bronze_df, silver_rt, file_issues_df, total_files)
 
 
 def render_quality_report() -> None:
     st.title("📋 Data Quality & Validation Report")
-    st.caption("Live report — recalculates automatically as your CSV data changes.")
+    st.caption("Live report — recalculates instantly as your CSV data changes.")
 
     script_dir = Path(__file__).resolve().parent
     input_path = str(script_dir / "data" / "input")
 
     # ── Run live checks ───────────────────────────────────────────────────────
-    report = _cached_quality_report(input_path)
+    report = _live_quality_report(input_path)
 
-    overall      = report["overall_status"]
-    generated_at = report["generated_at"]
     layers       = report["layers"]
-
-    # ── Overall status banner ─────────────────────────────────────────────────
-    _oc  = {"PASS": "#22c55e", "WARN": "#f97316", "FAIL": "#ef4444"}.get(overall, "#94a3b8")
-    _oi  = {"PASS": "✅", "WARN": "⚠️", "FAIL": "❌"}.get(overall, "❓")
-    _obg = {"PASS": "rgba(34,197,94,0.12)", "WARN": "rgba(249,115,22,0.12)",
-            "FAIL": "rgba(239,68,68,0.12)"}.get(overall, "rgba(148,163,184,0.1)")
-
-    st.markdown(
-        f"""
-        <div style="border-radius:12px; padding:1rem 1.5rem; margin-bottom:1.2rem;
-                    background:{_obg}; border:1.5px solid {_oc};">
-            <span style="font-size:2rem; font-weight:800; color:{_oc};">
-                {_oi} {overall}
-            </span>
-            <span style="margin-left:1.5rem; color:#94a3b8; font-size:0.9rem;">
-                Last computed: {generated_at}
-            </span>
-        </div>
-        """,
-        unsafe_allow_html=True,
-    )
 
     if not layers:
         st.warning("No data found in `data/input/`. Add CSV files to see the report.")
@@ -1462,22 +1571,37 @@ def render_quality_report() -> None:
     cols = st.columns(len(layers))
     for col, layer in zip(cols, layers):
         s     = layer["status"]
-        color = {"PASS": "#22c55e", "WARN": "#f97316", "FAIL": "#ef4444"}.get(s, "#94a3b8")
-        icon  = {"PASS": "✅", "WARN": "⚠️", "FAIL": "❌"}.get(s, "❓")
+        color = {"PASS": "#22c55e", "WARN": "#f59e0b", "FAIL": "#f43f5e"}.get(s, "#94a3b8")
+        # Removing cross marks and using professional indicator dots/text
+        indicator_dot = {"PASS": "🟢", "WARN": "🟡", "FAIL": "🔴"}.get(s, "⚪")
+        
         with col:
             st.markdown(
                 f"""
-                <div style="border-radius:12px; padding:1rem; text-align:center;
-                            border:1.5px solid {color}; background:rgba(0,0,0,0.05);">
-                    <div style="font-size:1.6rem; font-weight:800; color:{color};">{icon}</div>
-                    <div style="font-size:1.1rem; font-weight:700; color:#e2e8f0; margin:4px 0;">
-                        {layer['layer'].upper()}
+                <div style="border-radius:16px; padding:1.2rem; text-align:left;
+                            border:1px solid rgba(148, 163, 184, 0.2); 
+                            background: linear-gradient(145deg, rgba(30,41,59,0.7), rgba(15,23,42,0.8));
+                            box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
+                            transition: transform 0.2s ease;">
+                    <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom: 12px;">
+                        <span style="font-size:1.15rem; font-weight:700; color:#f8fafc; letter-spacing: 1px;">
+                            {layer['layer'].upper()}
+                        </span>
+                        <span style="font-size:0.9rem; font-weight:600; color:{color}; background: {color}20; padding: 2px 8px; border-radius: 12px;">
+                            {indicator_dot} {s}
+                        </span>
                     </div>
-                    <div style="color:#94a3b8; font-size:0.85rem;">{layer['row_count']:,} rows</div>
-                    <div style="color:#ef4444; font-size:0.8rem; margin-top:4px;">
-                        {layer['critical_failures']} critical
+                    <div style="color:#cbd5e1; font-size:1.1rem; font-weight: 500; margin-bottom: 8px;">
+                        {layer['row_count']:,} <span style="font-size:0.85rem; color:#64748b;">Rows Processed</span>
                     </div>
-                    <div style="color:#f97316; font-size:0.8rem;">{layer['warnings']} warnings</div>
+                    <div style="display:flex; gap: 10px; font-size: 0.85rem; font-weight: 600;">
+                        <div style="color: {'#f43f5e' if layer['critical_failures'] > 0 else '#64748b'};">
+                            {layer['critical_failures']} Critical
+                        </div>
+                        <div style="color: {'#f59e0b' if layer['warnings'] > 0 else '#64748b'};">
+                            {layer['warnings']} Warnings
+                        </div>
+                    </div>
                 </div>
                 """,
                 unsafe_allow_html=True,
@@ -1511,6 +1635,7 @@ def render_quality_report() -> None:
             "WARNING":  "color: #f97316; font-weight:600",
             "CRITICAL": "color: #ef4444; font-weight:700",
             "WARN":     "color: #f97316; font-weight:600",
+            "INFO":     "color: #38bdf8; font-weight:500",
         }.get(val, "")
 
     for layer in layers:
@@ -1552,7 +1677,7 @@ def render_quality_report() -> None:
     st.divider()
 
     # ── Duplicate detail table ────────────────────────────────────────────────
-    bronze_df, silver_df, file_issues_df = _compute_medallion_realtime(input_path)
+    bronze_df, silver_df, file_issues_df, _ = _compute_medallion_realtime(input_path)
     if not bronze_df.empty or (file_issues_df is not None and not file_issues_df.empty):
         st.subheader("🔍 Duplicate & Invalid File Detail")
         dup_df = build_validation_frame(bronze_df, silver_df, file_issues_df)
@@ -1567,7 +1692,7 @@ def render_quality_report() -> None:
             )
             st.dataframe(dup_df, use_container_width=True, hide_index=True)
 
-    st.caption(f"⚡ Report auto-refreshes. Last generated: {generated_at}")
+    st.caption("⚡ Report auto-refreshes live as files change.")
 
 
 
@@ -1716,7 +1841,7 @@ def render_email_sidebar() -> None:
                     raw_df       = _compute_gold_from_raw(input_path)
                     total_orders = int(raw_df["total_orders"].sum()) if not raw_df.empty else 0
 
-                    bronze_rt, silver_rt, _ = _compute_medallion_realtime(input_path)
+                    bronze_rt, silver_rt, _, _ = _compute_medallion_realtime(input_path)
                     duplicates = max(0, len(bronze_rt) - len(silver_rt)) if not bronze_rt.empty else 0
 
                     details = (
